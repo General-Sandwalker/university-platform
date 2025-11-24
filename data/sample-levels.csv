@@ -1,0 +1,6 @@
+code,name,specialtyId,order
+L1,Première Année Licence,REPLACE_WITH_SPECIALTY_ID,1
+L2,Deuxième Année Licence,REPLACE_WITH_SPECIALTY_ID,2
+L3,Troisième Année Licence,REPLACE_WITH_SPECIALTY_ID,3
+M1,Première Année Master,REPLACE_WITH_SPECIALTY_ID,4
+M2,Deuxième Année Master,REPLACE_WITH_SPECIALTY_ID,5

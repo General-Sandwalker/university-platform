@@ -1,0 +1,15 @@
+cin,firstName,lastName,email,password,role,studentCode,teacherCode,departmentCode,groupCode
+ADMIN001,System,Administrator,admin@university.com,Admin@123456,admin,,,CS,
+TEACH001,Ahmed,Benali,ahmed.benali@university.com,Teacher@123,teacher,,TEACH001,CS,
+TEACH002,Fatima,Zahra,fatima.zahra@university.com,Teacher@123,teacher,,TEACH002,MATH,
+TEACH003,Mohammed,Alami,mohammed.alami@university.com,Teacher@123,teacher,,TEACH003,CS,
+STU001,Youssef,Idrissi,youssef.idrissi@university.com,Student@123,student,STU001,,CS,L1-G1
+STU002,Amina,Chakir,amina.chakir@university.com,Student@123,student,STU002,,CS,L1-G1
+STU003,Hassan,Berrada,hassan.berrada@university.com,Student@123,student,STU003,,CS,L1-G1
+STU004,Salma,Tazi,salma.tazi@university.com,Student@123,student,STU004,,CS,L1-G2
+STU005,Omar,Fassi,omar.fassi@university.com,Student@123,student,STU005,,CS,L1-G2
+STU006,Laila,Bennis,laila.bennis@university.com,Student@123,student,STU006,,MATH,L1-G1
+STU007,Karim,Mansouri,karim.mansouri@university.com,Student@123,student,STU007,,MATH,L1-G1
+STU008,Nadia,Alaoui,nadia.alaoui@university.com,Student@123,student,STU008,,CS,L2-G1
+STU009,Mehdi,Ziani,mehdi.ziani@university.com,Student@123,student,STU009,,CS,L2-G1
+STU010,Sara,Lamrani,sara.lamrani@university.com,Student@123,student,STU010,,CS,L2-G2

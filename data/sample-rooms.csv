@@ -1,0 +1,11 @@
+# Sample Rooms
+code,name,type,capacity,building,floor
+A101,Amphitheater A,amphitheater,200,Building A,Ground Floor
+A201,Computer Lab 1,lab,40,Building A,2nd Floor
+A202,Computer Lab 2,lab,40,Building A,2nd Floor
+B101,Classroom B101,classroom,35,Building B,1st Floor
+B102,Classroom B102,classroom,35,Building B,1st Floor
+B201,Physics Lab,lab,30,Building B,2nd Floor
+C101,Conference Room,conference_room,50,Building C,1st Floor
+C201,Classroom C201,classroom,40,Building C,2nd Floor
+D101,Chemistry Lab,lab,25,Building D,1st Floor

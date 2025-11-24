@@ -1,0 +1,6 @@
+code,name,departmentId,description
+INF,Informatique,REPLACE_WITH_DEPT_ID,Computer Science and Information Technology
+MATH,Mathématiques,REPLACE_WITH_DEPT_ID,Mathematics and Applied Mathematics
+PHY,Physique,REPLACE_WITH_DEPT_ID,Physics and Engineering
+CHEM,Chimie,REPLACE_WITH_DEPT_ID,Chemistry and Molecular Sciences
+BIO,Biologie,REPLACE_WITH_DEPT_ID,Biology and Life Sciences
