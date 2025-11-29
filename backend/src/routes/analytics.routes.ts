@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../entities/User';
 import {
+  getOverview,
   getStudentPerformance,
   getMyPerformance,
   getRoomOccupancy,
@@ -17,6 +18,20 @@ import {
 } from '../controllers/analytics.controller';
 
 const router = Router();
+
+/**
+ * @swagger
+ * /api/analytics/overview:
+ *   get:
+ *     summary: Get overview statistics for dashboard
+ *     tags: [Analytics]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Overview statistics retrieved successfully
+ */
+router.get('/overview', authenticate, getOverview);
 
 /**
  * @swagger

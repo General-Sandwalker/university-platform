@@ -22,6 +22,8 @@ export class AbsenceService {
     studentId: string;
     timetableEntryId: string;
     recordedById: string; // Teacher who recorded the absence
+    status?: 'unexcused' | 'excused';
+    excuseReason?: string;
   }): Promise<Absence> {
     // Verify student exists and is a student
     const student = await this.userRepository.findOne({
@@ -51,7 +53,7 @@ export class AbsenceService {
       where: { id: data.recordedById },
     });
 
-    if (!teacher || (teacher.role !== 'teacher' && teacher.role !== 'department_head')) {
+    if (!teacher || (teacher.role !== 'teacher' && teacher.role !== 'department_head' && teacher.role !== 'admin')) {
       throw new AppError('Invalid teacher', 400);
     }
 
@@ -72,7 +74,10 @@ export class AbsenceService {
       student,
       timetableEntry,
       recordedBy: teacher,
-      status: 'unexcused',
+      status: data.status || 'unexcused',
+      excuseReason: data.excuseReason,
+      reviewedBy: data.status === 'excused' ? teacher : undefined,
+      reviewedAt: data.status === 'excused' ? new Date() : undefined,
     });
 
     const savedAbsence = await this.absenceRepository.save(absence);
@@ -277,9 +282,8 @@ export class AbsenceService {
       .leftJoinAndSelect('absence.timetableEntry', 'timetable')
       .leftJoinAndSelect('timetable.subject', 'subject')
       .leftJoinAndSelect('timetable.teacher', 'teacher')
-      .leftJoinAndSelect('absence.recordedBy', 'recordedBy')
       .leftJoinAndSelect('absence.reviewedBy', 'reviewedBy')
-      .orderBy('timetable.date', 'DESC')
+      .orderBy('absence.createdAt', 'DESC')
       .addOrderBy('timetable.startTime', 'DESC');
 
     if (filters?.studentId) {

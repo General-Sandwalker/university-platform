@@ -29,6 +29,25 @@ export class AnalyticsService {
     this.subjectRepository = AppDataSource.getRepository(Subject);
   }
 
+  // Overview statistics for dashboard
+  async getOverview(): Promise<{
+    totalUsers: number;
+    totalTimetables: number;
+    pendingAbsences: number;
+  }> {
+    const [totalUsers, totalTimetables, pendingAbsences] = await Promise.all([
+      this.userRepository.count(),
+      this.timetableRepository.count(),
+      this.absenceRepository.count({ where: { status: 'pending' } })
+    ]);
+
+    return {
+      totalUsers,
+      totalTimetables,
+      pendingAbsences
+    };
+  }
+
   // Student Performance Analytics
   async getStudentPerformance(studentId: string): Promise<{
     student: User;

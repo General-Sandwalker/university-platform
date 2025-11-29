@@ -7,7 +7,11 @@ const timetableService = new TimetableService();
 
 export const createTimetable = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const timetable = await timetableService.create(req.body);
+    const timetable = await timetableService.create(
+      req.body,
+      req.user?.id,
+      req.user?.role
+    );
     res.status(201).json({
       success: true,
       data: timetable,
@@ -15,19 +19,18 @@ export const createTimetable = asyncHandler(
   }
 );
 
-export const getAllTimetables = asyncHandler(
+export const getTimetableByGroup = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const filters = {
-      teacherId: req.query.teacherId as string,
-      groupId: req.query.groupId as string,
-      roomId: req.query.roomId as string,
-      subjectId: req.query.subjectId as string,
-      startDate: req.query.startDate as string,
-      endDate: req.query.endDate as string,
-      sessionType: req.query.sessionType as string,
-    };
+    const { groupId } = req.params;
+    const semesterId = req.query.semesterId as string;
 
-    const timetables = await timetableService.getAll(filters);
+    const timetables = await timetableService.getByGroup(
+      groupId,
+      semesterId,
+      req.user?.id,
+      req.user?.role
+    );
+
     res.json({
       success: true,
       data: timetables,
@@ -37,7 +40,11 @@ export const getAllTimetables = asyncHandler(
 
 export const getTimetableById = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const timetable = await timetableService.getById(req.params.id);
+    const timetable = await timetableService.getById(
+      req.params.id,
+      req.user?.id,
+      req.user?.role
+    );
     res.json({
       success: true,
       data: timetable,
@@ -45,76 +52,14 @@ export const getTimetableById = asyncHandler(
   }
 );
 
-export const getStudentSchedule = asyncHandler(
-  async (req: AuthRequest, res: Response) => {
-    const studentId = req.params.studentId || req.user?.id;
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-
-    if (!studentId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Student ID is required',
-      });
-    }
-
-    const schedule = await timetableService.getStudentSchedule(
-      studentId,
-      startDate,
-      endDate
-    );
-
-    res.json({
-      success: true,
-      data: schedule,
-    });
-  }
-);
-
-export const getMySchedule = asyncHandler(
-  async (req: AuthRequest, res: Response) => {
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'Unauthorized',
-      });
-    }
-
-    // Handle different roles
-    let schedule;
-    if (req.user.role === 'student') {
-      schedule = await timetableService.getStudentSchedule(
-        req.user.id,
-        startDate,
-        endDate
-      );
-    } else if (req.user.role === 'teacher' || req.user.role === 'department_head') {
-      schedule = await timetableService.getAll({
-        teacherId: req.user.id,
-        startDate,
-        endDate,
-      });
-    } else {
-      // Admin - get all
-      schedule = await timetableService.getAll({
-        startDate,
-        endDate,
-      });
-    }
-
-    res.json({
-      success: true,
-      data: schedule,
-    });
-  }
-);
-
 export const updateTimetable = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const timetable = await timetableService.update(req.params.id, req.body);
+    const timetable = await timetableService.update(
+      req.params.id,
+      req.body,
+      req.user?.id,
+      req.user?.role
+    );
     res.json({
       success: true,
       data: timetable,
@@ -124,20 +69,28 @@ export const updateTimetable = asyncHandler(
 
 export const deleteTimetable = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    await timetableService.delete(req.params.id);
-    res.json({
-      success: true,
-      message: 'Timetable entry deleted successfully',
-    });
+    await timetableService.delete(req.params.id, req.user?.id, req.user?.role);
+    res.status(204).send();
   }
 );
 
-export const checkAvailability = asyncHandler(
+export const getAccessibleGroups = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const result = await timetableService.checkAvailability(req.body);
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized',
+      });
+    }
+
+    const groups = await timetableService.getAccessibleGroups(
+      req.user.id,
+      req.user.role
+    );
+
     res.json({
       success: true,
-      data: result,
+      data: groups,
     });
   }
 );

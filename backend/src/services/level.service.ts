@@ -17,7 +17,7 @@ export class LevelService {
     name: string;
     code: string;
     specialtyId: string;
-    order: number;
+    year: number;
   }): Promise<Level> {
     // Check if specialty exists
     const specialty = await this.specialtyRepository.findOne({
@@ -44,7 +44,7 @@ export class LevelService {
       name: data.name,
       code: data.code,
       specialty,
-      order: data.order,
+      year: data.year,
     });
 
     return await this.levelRepository.save(level);
@@ -59,7 +59,7 @@ export class LevelService {
       .leftJoinAndSelect('level.specialty', 'specialty')
       .leftJoinAndSelect('specialty.department', 'department')
       .leftJoinAndSelect('level.groups', 'groups')
-      .orderBy('level.order', 'ASC')
+      .orderBy('level.year', 'ASC')
       .addOrderBy('level.name', 'ASC');
 
     if (filters?.specialtyId) {
@@ -81,7 +81,7 @@ export class LevelService {
   async getById(id: string): Promise<Level> {
     const level = await this.levelRepository.findOne({
       where: { id },
-      relations: ['specialty', 'specialty.department', 'groups', 'subjects'],
+      relations: ['specialty', 'specialty.department', 'groups'],
     });
 
     if (!level) {
@@ -97,7 +97,7 @@ export class LevelService {
       name?: string;
       code?: string;
       specialtyId?: string;
-      order?: number;
+      year?: number;
     }
   ): Promise<Level> {
     const level = await this.getById(id);
@@ -132,7 +132,7 @@ export class LevelService {
 
     if (data.name) level.name = data.name;
     if (data.code) level.code = data.code;
-    if (data.order !== undefined) level.order = data.order;
+    if (data.year !== undefined) level.year = data.year;
 
     return await this.levelRepository.save(level);
   }
@@ -140,24 +140,17 @@ export class LevelService {
   async delete(id: string): Promise<void> {
     const level = await this.levelRepository.findOne({
       where: { id },
-      relations: ['groups', 'subjects'],
+      relations: ['groups'],
     });
 
     if (!level) {
       throw new AppError('Level not found', 404);
     }
 
-    // Check if level has associated groups or subjects
+    // Check if level has associated groups
     if (level.groups && level.groups.length > 0) {
       throw new AppError(
         'Cannot delete level with associated groups. Please delete groups first.',
-        400
-      );
-    }
-
-    if (level.subjects && level.subjects.length > 0) {
-      throw new AppError(
-        'Cannot delete level with associated subjects. Please delete subjects first.',
         400
       );
     }

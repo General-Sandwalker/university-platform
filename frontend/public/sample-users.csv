@@ -1,0 +1,3 @@
+cin,firstName,lastName,email,password,role,studentCode,teacherCode,departmentCode,groupCode,phone,dateOfBirth,address,specialization
+STU123,John,Doe,john.doe@example.com,Password@123,student,STU123,,,L1-G1,+212-600-000-001,2000-01-15,123 Main St,Computer Science
+TEACH456,Jane,Smith,jane.smith@example.com,Password@123,teacher,,TEACH456,CS,,+212-600-000-002,1985-05-20,456 Teacher Ave,Software Engineering

@@ -557,26 +557,25 @@ function EventCalendar() {
       </div>
     </div>
   );
-}
+### 3. Schedule Display (Weekly Recurring Classes)
 
-export default EventCalendar;
-```
-
-### 3. Timetable Display
+**Note:** This example shows the legacy pattern. For the current implementation using TypeScript, TanStack Query, and the new semester-based system, see `/frontend/src/components/schedule/ScheduleGrid.tsx` and `/frontend/src/pages/schedule/Schedule.tsx`.
 
 ```javascript
-// services/timetableService.js
+// services/timetableService.js (Legacy Example)
 import apiClient from './apiClient';
 
 class TimetableService {
-  async getTimetable(filters = {}) {
-    const response = await apiClient.get('/timetable', { params: filters });
+  async getScheduleForGroup(groupId, semesterId) {
+    const response = await apiClient.get(`/timetable/group/${groupId}`, {
+      params: { semesterId }
+    });
     return response.data;
   }
 
-  async getMyTimetable() {
-    // Gets timetable for current user
-    const response = await apiClient.get('/timetable/my');
+  async getAccessibleGroups() {
+    // Gets groups the user can access based on role
+    const response = await apiClient.get('/timetable/accessible-groups');
     return response.data;
   }
 }
@@ -585,38 +584,38 @@ export default new TimetableService();
 ```
 
 ```jsx
-// components/Timetable/WeeklyTimetable.jsx
+// components/Schedule/WeeklySchedule.jsx (Legacy Example)
 import React, { useState, useEffect } from 'react';
 import timetableService from '../../services/timetableService';
 
-function WeeklyTimetable() {
-  const [timetable, setTimetable] = useState([]);
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function WeeklySchedule() {
+  const [schedule, setSchedule] = useState([]);
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const timeSlots = ['08:00', '10:00', '12:00', '14:00', '16:00'];
 
   useEffect(() => {
-    loadTimetable();
+    loadSchedule();
   }, []);
 
-  const loadTimetable = async () => {
+  const loadSchedule = async () => {
     try {
-      const data = await timetableService.getTimetable();
-      setTimetable(data);
+      const data = await timetableService.getScheduleForGroup(groupId, semesterId);
+      setSchedule(data);
     } catch (error) {
-      console.error('Error loading timetable:', error);
+      console.error('Error loading schedule:', error);
     }
   };
 
   const getSessionForSlot = (day, time) => {
-    return timetable.find(
+    return schedule.find(
       (session) => session.dayOfWeek === day && session.startTime === time
     );
   };
 
   return (
-    <div className="timetable">
-      <h2>Weekly Timetable</h2>
-      <table className="timetable-grid">
+    <div className="schedule">
+      <h2>Weekly Schedule</h2>
+      <table className="schedule-grid">
         <thead>
           <tr>
             <th>Time</th>
@@ -630,19 +629,19 @@ function WeeklyTimetable() {
             <tr key={timeIndex}>
               <td className="time-slot">{time}</td>
               {days.map((day, dayIndex) => {
-                const session = getSessionForSlot(dayIndex, time);
+                const session = getSessionForSlot(days[dayIndex], time);
                 return (
                   <td key={dayIndex} className="session-cell">
                     {session ? (
                       <div className={`session session-${session.sessionType}`}>
                         <div className="session-subject">
-                          {session.subject?.name}
+                          {session.subject?.code}
                         </div>
                         <div className="session-teacher">
                           {session.teacher?.firstName}
                         </div>
                         <div className="session-room">
-                          {session.room?.name}
+                          {session.room?.code}
                         </div>
                       </div>
                     ) : (
@@ -659,7 +658,7 @@ function WeeklyTimetable() {
   );
 }
 
-export default WeeklyTimetable;
+export default WeeklySchedule;
 ```
 
 ### 4. User Management (Admin)

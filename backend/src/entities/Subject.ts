@@ -7,13 +7,14 @@ import {
   ManyToOne,
   Index,
 } from 'typeorm';
-import { Department } from './Department';
+import { Specialty } from './Specialty';
+import { Level } from './Level';
+import { User } from './User';
 
 export enum SubjectType {
   LECTURE = 'lecture',
   TD = 'td', // Travaux Dirigés
   TP = 'tp', // Travaux Pratiques
-  INTEGRATED = 'integrated',
 }
 
 @Entity('subjects')
@@ -38,16 +39,23 @@ export class Subject {
   @Column({ type: 'int', default: 3 })
   credits: number; // ECTS credits
 
+  @Column({ type: 'decimal', precision: 3, scale: 1, default: 1.0 })
+  coefficient: number; // Subject weight in final grade
+
   @Column({ type: 'int', default: 1 })
   semester: number; // 1 or 2
 
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @ManyToOne(() => Department, (department) => department.subjects, {
-    onDelete: 'CASCADE',
-  })
-  department: Department;
+  @ManyToOne(() => Specialty, { onDelete: 'CASCADE' })
+  specialty: Specialty;
+
+  @ManyToOne(() => Level, { onDelete: 'CASCADE' })
+  level: Level;
+
+  @ManyToOne(() => User, { nullable: true })
+  teacher: User;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

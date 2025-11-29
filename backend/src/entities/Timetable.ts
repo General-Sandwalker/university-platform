@@ -13,6 +13,7 @@ import { Subject } from './Subject';
 import { Room } from './Room';
 import { Group } from './Group';
 import { Absence } from './Absence';
+import { Semester } from './Semester';
 
 export enum SessionType {
   LECTURE = 'lecture',
@@ -22,15 +23,29 @@ export enum SessionType {
   MAKEUP = 'makeup', // Rattrapage
 }
 
+export enum DayOfWeek {
+  MONDAY = 'monday',
+  TUESDAY = 'tuesday',
+  WEDNESDAY = 'wednesday',
+  THURSDAY = 'thursday',
+  FRIDAY = 'friday',
+  SATURDAY = 'saturday',
+  SUNDAY = 'sunday',
+}
+
 @Entity('timetable')
-@Index(['date', 'startTime', 'room'])
-@Index(['teacher'])
+@Index(['group', 'semester', 'dayOfWeek', 'startTime'])
+@Index(['teacher', 'semester'])
 export class Timetable {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'date' })
-  date: Date;
+  // Week-based schedule (repeats weekly throughout the semester)
+  @Column({
+    type: 'enum',
+    enum: DayOfWeek,
+  })
+  dayOfWeek: DayOfWeek;
 
   @Column({ type: 'time' })
   startTime: string; // e.g., "08:00"
@@ -49,6 +64,9 @@ export class Timetable {
 
   @ManyToOne(() => Group, { onDelete: 'CASCADE' })
   group: Group;
+
+  @ManyToOne(() => Semester, { onDelete: 'CASCADE' })
+  semester: Semester;
 
   @Column({
     type: 'enum',

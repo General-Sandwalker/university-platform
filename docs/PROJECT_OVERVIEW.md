@@ -91,9 +91,10 @@ cd university-platform
 The foundation is complete. Here's what you can add next:
 
 ```
-□ User Management (CRUD + CSV import)
-□ Referential Data Management (departments, rooms, etc.)
-□ Timetable Management (scheduling + conflict detection)
+✅ User Management (CRUD + CSV import)
+✅ Referential Data Management (departments, rooms, etc.)
+✅ Schedule Management (semester-based weekly schedules + role-based permissions)
+✅ Semester Management (academic periods)
 □ Absence Management (tracking + excuse workflow)
 □ Messaging System (internal chat)
 □ Notification System (alerts + emails)
@@ -167,7 +168,7 @@ The foundation is complete. Here's what you can add next:
 | **Authorization** | ✅ Complete | RBAC with 4 roles |
 | **User Management** | 🔶 Partial | Entity + auth done, CRUD pending |
 | **Departments** | 🔶 Partial | Entity ready, endpoints pending |
-| **Timetable** | 🔶 Partial | Entity ready, logic pending |
+| **Timetable/Schedule** | ✅ Complete | Semester-based weekly schedules, role-based permissions |
 | **Absences** | 🔶 Partial | Entity ready, workflow pending |
 | **Messaging** | 🔶 Partial | Entity ready, endpoints pending |
 | **Notifications** | 🔶 Partial | Entity ready, service pending |

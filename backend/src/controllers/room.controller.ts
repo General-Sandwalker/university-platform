@@ -19,7 +19,7 @@ export class RoomController {
     const filters = {
       type: req.query.type as any,
       building: req.query.building as string,
-      available: req.query.available === 'true',
+      available: req.query.available ? req.query.available === 'true' : undefined,
     };
 
     const rooms = await roomService.getAll(filters);

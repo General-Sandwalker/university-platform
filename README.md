@@ -24,10 +24,13 @@ A production-ready, modular, and scalable backend API for managing university op
   - Subject/course management
 
 - **Timetable System**
-  - Schedule creation and management
-  - Conflict detection (room/teacher double-booking)
+  - Semester-based weekly recurring schedules
+  - Role-based access control (view/edit permissions)
+  - Visual weekly grid interface
+  - Conflict detection (time slot overlaps)
   - Different session types (lecture, TD, TP, exam, makeup)
-  - Calendar integration
+  - Group-specific schedules
+  - Active semester management
 
 - **Absence Management**
   - Absence recording and tracking
@@ -204,11 +207,21 @@ Authorization: Bearer <your-jwt-token>
 - `POST /api/v1/departments` - Create department (admin only)
 - Similar patterns for other referential data
 
-#### Timetable
-- `GET /api/v1/timetable` - Get timetable (with filters)
-- `POST /api/v1/timetable` - Create timetable entry (teacher/admin)
-- `PUT /api/v1/timetable/:id` - Update timetable entry
-- `DELETE /api/v1/timetable/:id` - Delete timetable entry
+#### Semesters
+- `GET /api/v1/semesters` - List all semesters
+- `GET /api/v1/semesters/active` - Get active semester
+- `POST /api/v1/semesters` - Create semester (admin only)
+- `PUT /api/v1/semesters/:id` - Update semester (admin only)
+- `PATCH /api/v1/semesters/:id/activate` - Set as active (admin only)
+- `DELETE /api/v1/semesters/:id` - Delete semester (admin only)
+
+#### Schedule (Timetable)
+- `GET /api/v1/timetable/accessible-groups` - Get accessible groups by role
+- `GET /api/v1/timetable/group/:groupId` - Get schedule for a group
+- `GET /api/v1/timetable/:id` - Get specific entry
+- `POST /api/v1/timetable` - Create entry (admin/department_head)
+- `PUT /api/v1/timetable/:id` - Update entry (admin/department_head)
+- `DELETE /api/v1/timetable/:id` - Delete entry (admin/department_head)
 
 #### Absences
 - `GET /api/v1/absences` - List absences

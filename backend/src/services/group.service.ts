@@ -63,7 +63,6 @@ export class GroupService {
       .leftJoinAndSelect('group.level', 'level')
       .leftJoinAndSelect('level.specialty', 'specialty')
       .leftJoinAndSelect('specialty.department', 'department')
-      .leftJoinAndSelect('group.students', 'students')
       .orderBy('group.name', 'ASC');
 
     if (filters?.levelId) {

@@ -12,15 +12,24 @@ class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
+    // In development without SMTP credentials, use console logger
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+      this.transporter = nodemailer.createTransport({
+        streamTransport: true,
+        newline: 'unix',
+        buffer: true,
+      } as any);
+    } else {
+      this.transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD,
+        },
+      });
+    }
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
@@ -33,6 +42,14 @@ class EmailService {
         text: options.text,
       };
 
+      // If no SMTP credentials, just log to console
+      if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+        logger.info(`[EMAIL] Would send email to ${options.to}`);
+        logger.info(`[EMAIL] Subject: ${options.subject}`);
+        logger.info(`[EMAIL] Body preview: ${options.text || options.html?.substring(0, 200)}`);
+        return;
+      }
+
       await this.transporter.sendMail(mailOptions);
       logger.info(`Email sent successfully to ${options.to}`);
     } catch (error) {
@@ -42,7 +59,7 @@ class EmailService {
   }
 
   async sendPasswordResetEmail(to: string, resetToken: string, userName: string): Promise<void> {
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password?token=${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost'}/reset-password?token=${resetToken}`;
     
     const html = `
       <!DOCTYPE html>

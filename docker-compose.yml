@@ -55,6 +55,20 @@ services:
       - university_network
     command: npm run dev
 
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: university_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - university_network
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
     driver: local

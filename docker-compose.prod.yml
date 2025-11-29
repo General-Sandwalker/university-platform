@@ -43,6 +43,20 @@ services:
     networks:
       - university_network
 
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: university_frontend_prod
+    restart: always
+    ports:
+      - "80:80"
+    networks:
+      - university_network
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
     driver: local

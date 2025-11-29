@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Authentication schemas
 export const loginSchema = z.object({
   body: z.object({
-    cin: z.string().min(8, 'CIN must be at least 8 characters').max(20),
+    cin: z.string().min(6, 'CIN must be at least 6 characters').max(20),
     password: z.string().min(6, 'Password must be at least 6 characters'),
   }),
 });
@@ -106,7 +106,7 @@ export const createLevelSchema = z.object({
   body: z.object({
     code: z.string().min(2).max(20),
     name: z.string().min(2).max(255),
-    order: z.number().int().min(1).max(10),
+    year: z.number().int().min(1).max(10),
     specialtyId: z.string().uuid(),
   }),
 });
@@ -115,7 +115,7 @@ export const updateLevelSchema = z.object({
   body: z.object({
     code: z.string().min(2).max(20).optional(),
     name: z.string().min(2).max(255).optional(),
-    order: z.number().int().min(1).max(10).optional(),
+    year: z.number().int().min(1).max(10).optional(),
     specialtyId: z.string().uuid().optional(),
   }),
 });
@@ -195,13 +195,14 @@ export const updateSubjectSchema = z.object({
 
 export const createTimetableSchema = z.object({
   body: z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+    dayOfWeek: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format'),
     endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format'),
     subjectId: z.string().uuid(),
     teacherId: z.string().uuid(),
     roomId: z.string().uuid(),
     groupId: z.string().uuid(),
+    semesterId: z.string().uuid(),
     sessionType: z.enum(['lecture', 'td', 'tp', 'exam', 'makeup']),
     notes: z.string().optional(),
   }),
@@ -209,15 +210,41 @@ export const createTimetableSchema = z.object({
 
 export const updateTimetableSchema = z.object({
   body: z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+    dayOfWeek: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']).optional(),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format').optional(),
     endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format').optional(),
     subjectId: z.string().uuid().optional(),
     teacherId: z.string().uuid().optional(),
     roomId: z.string().uuid().optional(),
     groupId: z.string().uuid().optional(),
+    semesterId: z.string().uuid().optional(),
     sessionType: z.enum(['lecture', 'td', 'tp', 'exam', 'makeup']).optional(),
     notes: z.string().optional(),
+  }),
+});
+
+// Semester schemas
+export const createSemesterSchema = z.object({
+  body: z.object({
+    code: z.string().min(2).max(50),
+    name: z.string().min(2).max(255),
+    academicYear: z.number().int().min(2000).max(2100),
+    semesterNumber: z.number().int().min(1).max(2),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+    isActive: z.boolean().optional(),
+  }),
+});
+
+export const updateSemesterSchema = z.object({
+  body: z.object({
+    code: z.string().min(2).max(50).optional(),
+    name: z.string().min(2).max(255).optional(),
+    academicYear: z.number().int().min(2000).max(2100).optional(),
+    semesterNumber: z.number().int().min(1).max(2).optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+    isActive: z.boolean().optional(),
   }),
 });
 
@@ -225,6 +252,8 @@ export const createAbsenceSchema = z.object({
   body: z.object({
     studentId: z.string().uuid(),
     timetableEntryId: z.string().uuid(),
+    status: z.enum(['unexcused', 'excused']).optional(),
+    excuseReason: z.string().min(10).optional(),
   }),
 });
 

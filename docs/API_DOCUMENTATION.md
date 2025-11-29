@@ -30,12 +30,13 @@ Authorization: Bearer <access_token>
 6. [Groups](#group-endpoints)
 7. [Rooms](#room-endpoints)
 8. [Subjects](#subject-endpoints)
-9. [Timetable](#timetable-endpoints)
-10. [Absences](#absence-endpoints)
-11. [Messages](#message-endpoints)
-12. [Notifications](#notification-endpoints)
-13. [Events](#event-endpoints)
-14. [Analytics](#analytics-endpoints)
+9. [Semesters](#semester-endpoints)
+10. [Schedule (Timetable)](#schedule-endpoints)
+11. [Absences](#absence-endpoints)
+12. [Messages](#message-endpoints)
+13. [Notifications](#notification-endpoints)
+14. [Events](#event-endpoints)
+15. [Analytics](#analytics-endpoints)
 
 ---
 
@@ -587,28 +588,321 @@ Delete subject (Admin).
 
 ---
 
-## Timetable Endpoints
+## Semester Endpoints
 
-### GET /timetable
-Get timetable entries.
+### GET /semesters
+Get all semesters.
+
+**Authentication:** Required  
+**Authorization:** All roles
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "code": "2024-2025-S1",
+      "name": "Fall 2024-2025",
+      "academicYear": 2024,
+      "semesterNumber": 1,
+      "startDate": "2024-09-01",
+      "endDate": "2025-01-31",
+      "isActive": true,
+      "createdAt": "2024-08-15T10:00:00.000Z",
+      "updatedAt": "2024-08-15T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### GET /semesters/active
+Get the currently active semester.
+
+**Authentication:** Required  
+**Authorization:** All roles
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "code": "2024-2025-S1",
+    "name": "Fall 2024-2025",
+    "academicYear": 2024,
+    "semesterNumber": 1,
+    "startDate": "2024-09-01",
+    "endDate": "2025-01-31",
+    "isActive": true
+  }
+}
+```
+
+### GET /semesters/:id
+Get semester by ID.
+
+**Authentication:** Required  
+**Authorization:** All roles
+
+### POST /semesters
+Create a new semester (Admin only).
+
+**Authentication:** Required  
+**Authorization:** Admin only
+
+**Request Body:**
+```json
+{
+  "code": "2024-2025-S1",
+  "name": "Fall 2024-2025",
+  "academicYear": 2024,
+  "semesterNumber": 1,
+  "startDate": "2024-09-01",
+  "endDate": "2025-01-31",
+  "isActive": true
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "code": "2024-2025-S1",
+    "name": "Fall 2024-2025",
+    "academicYear": 2024,
+    "semesterNumber": 1,
+    "startDate": "2024-09-01",
+    "endDate": "2025-01-31",
+    "isActive": true,
+    "createdAt": "2024-08-15T10:00:00.000Z",
+    "updatedAt": "2024-08-15T10:00:00.000Z"
+  }
+}
+```
+
+### PUT /semesters/:id
+Update semester (Admin only).
+
+**Authentication:** Required  
+**Authorization:** Admin only
+
+**Request Body:** Same as POST, all fields optional
+
+### PATCH /semesters/:id/activate
+Set a semester as active (Admin only). Automatically deactivates all other semesters.
+
+**Authentication:** Required  
+**Authorization:** Admin only
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "isActive": true
+  }
+}
+```
+
+### DELETE /semesters/:id
+Delete semester (Admin only). Warning: This will also delete all associated schedule entries.
+
+**Authentication:** Required  
+**Authorization:** Admin only
+
+---
+
+## Schedule Endpoints
+
+> **Note:** The schedule system is semester-based with weekly recurring classes. Each entry represents a class that repeats every week throughout the semester (e.g., "Math every Monday 08:00-10:00").
+
+### GET /timetable/accessible-groups
+Get all groups the current user can access based on their role.
+
+**Authentication:** Required  
+**Authorization:** All roles
+
+**Role-based access:**
+- **Admin**: All groups in the system
+- **Department Head**: Groups in their department
+- **Teacher**: Groups where they teach
+- **Student**: Their own group only
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "code": "L1-G1",
+      "name": "Group 1",
+      "level": {
+        "id": "uuid",
+        "code": "L1",
+        "name": "Level 1",
+        "specialty": {
+          "id": "uuid",
+          "code": "CS",
+          "name": "Computer Science",
+          "department": {
+            "id": "uuid",
+            "code": "IT",
+            "name": "Information Technology"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+### GET /timetable/group/:groupId
+Get schedule for a specific group.
+
+**Authentication:** Required  
+**Authorization:** 
+- Admin: Can view all groups
+- Department Head: Can view groups in their department
+- Teacher: Can view groups where they teach
+- Student: Can view their own group only
 
 **Query Parameters:**
-- `groupId` (optional): Filter by group
-- `teacherId` (optional): Filter by teacher
-- `roomId` (optional): Filter by room
-- `dayOfWeek` (optional): Filter by day (0-6)
+- `semesterId` (optional): Filter by semester. If not provided, uses active semester.
 
-### POST /timetable
-Create timetable entry (Admin/Teacher).
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "dayOfWeek": "monday",
+      "startTime": "08:00",
+      "endTime": "10:00",
+      "subject": {
+        "id": "uuid",
+        "code": "CS101",
+        "name": "Introduction to Programming"
+      },
+      "teacher": {
+        "id": "uuid",
+        "firstName": "John",
+        "lastName": "Doe"
+      },
+      "room": {
+        "id": "uuid",
+        "code": "A101",
+        "name": "Computer Lab 1"
+      },
+      "group": {
+        "id": "uuid",
+        "code": "L1-G1",
+        "name": "Group 1"
+      },
+      "semester": {
+        "id": "uuid",
+        "code": "2024-2025-S1",
+        "name": "Fall 2024-2025"
+      },
+      "sessionType": "lecture",
+      "notes": "Bring laptops",
+      "isCancelled": false,
+      "createdAt": "2024-08-15T10:00:00.000Z",
+      "updatedAt": "2024-08-15T10:00:00.000Z"
+    }
+  ]
+}
+```
 
 ### GET /timetable/:id
-Get timetable entry by ID.
+Get a specific schedule entry by ID.
+
+**Authentication:** Required  
+**Authorization:** Same as group access rules
+
+### POST /timetable
+Create a new schedule entry (Admin/Department Head only).
+
+**Authentication:** Required  
+**Authorization:** 
+- Admin: Can create for any group
+- Department Head: Can create for groups in their department
+
+**Request Body:**
+```json
+{
+  "dayOfWeek": "monday",
+  "startTime": "08:00",
+  "endTime": "10:00",
+  "subjectId": "uuid",
+  "teacherId": "uuid",
+  "roomId": "uuid",
+  "groupId": "uuid",
+  "semesterId": "uuid",
+  "sessionType": "lecture",
+  "notes": "Optional notes"
+}
+```
+
+**Session Types:**
+- `lecture`: Standard lecture class
+- `td`: Travaux Dirigés (tutorial/exercise session)
+- `tp`: Travaux Pratiques (practical/lab session)
+- `exam`: Examination
+- `makeup`: Makeup class (Rattrapage)
+
+**Days of Week:**
+- `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "dayOfWeek": "monday",
+    "startTime": "08:00",
+    "endTime": "10:00",
+    "subject": {...},
+    "teacher": {...},
+    "room": {...},
+    "group": {...},
+    "semester": {...},
+    "sessionType": "lecture",
+    "notes": "Optional notes"
+  }
+}
+```
+
+**Error (409) - Time Conflict:**
+```json
+{
+  "status": "error",
+  "message": "Time conflict: This slot overlaps with Math at 08:00-10:00"
+}
+```
 
 ### PUT /timetable/:id
-Update timetable entry (Admin/Teacher).
+Update a schedule entry (Admin/Department Head only).
+
+**Authentication:** Required  
+**Authorization:** Same as POST
+
+**Request Body:** Same as POST, all fields optional
 
 ### DELETE /timetable/:id
-Delete timetable entry (Admin).
+Delete a schedule entry (Admin/Department Head only).
+
+**Authentication:** Required  
+**Authorization:** Same as POST
+
+**Response (204):** No content
 
 ---
 

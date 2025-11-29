@@ -3,6 +3,22 @@ import { AnalyticsService } from '../services/analytics.service';
 
 const analyticsService = new AnalyticsService();
 
+export const getOverview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const overview = await analyticsService.getOverview();
+    res.json({
+      success: true,
+      data: overview
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getStudentPerformance = async (
   req: Request,
   res: Response,

@@ -40,7 +40,7 @@ export class Room {
   @Column({ type: 'varchar', length: 100, nullable: true })
   building: string;
 
-  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   floor: string;
 
   @Column({ type: 'text', nullable: true })

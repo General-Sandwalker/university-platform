@@ -1,10 +1,12 @@
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database';
-import { Timetable } from '../entities/Timetable';
+import { Timetable, DayOfWeek } from '../entities/Timetable';
 import { Subject } from '../entities/Subject';
 import { User } from '../entities/User';
 import { Room } from '../entities/Room';
 import { Group } from '../entities/Group';
+import { Semester } from '../entities/Semester';
+import { Department } from '../entities/Department';
 import { AppError } from '../middleware/errorHandler';
 
 export class TimetableService {
@@ -13,6 +15,8 @@ export class TimetableService {
   private userRepository: Repository<User>;
   private roomRepository: Repository<Room>;
   private groupRepository: Repository<Group>;
+  private semesterRepository: Repository<Semester>;
+  private departmentRepository: Repository<Department>;
 
   constructor() {
     this.timetableRepository = AppDataSource.getRepository(Timetable);
@@ -20,104 +24,96 @@ export class TimetableService {
     this.userRepository = AppDataSource.getRepository(User);
     this.roomRepository = AppDataSource.getRepository(Room);
     this.groupRepository = AppDataSource.getRepository(Group);
-  }
-
-  private parseTime(time: string): { hours: number; minutes: number } {
-    const [hours, minutes] = time.split(':').map(Number);
-    return { hours, minutes };
+    this.semesterRepository = AppDataSource.getRepository(Semester);
+    this.departmentRepository = AppDataSource.getRepository(Department);
   }
 
   private timeToMinutes(time: string): number {
-    const { hours, minutes } = this.parseTime(time);
+    const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
   }
 
-  private async checkTeacherConflict(
-    teacherId: string,
-    date: Date,
-    startTime: string,
-    endTime: string,
-    excludeId?: string
-  ): Promise<boolean> {
-    const query = this.timetableRepository
-      .createQueryBuilder('timetable')
-      .where('timetable.teacherId = :teacherId', { teacherId })
-      .andWhere('timetable.date = :date', { date });
-
-    if (excludeId) {
-      query.andWhere('timetable.id != :excludeId', { excludeId });
+  // Check if user can access a specific group's schedule
+  async canAccessGroup(userId: string, userRole: string, groupId: string): Promise<boolean> {
+    if (userRole === 'admin') {
+      return true;
     }
 
-    const existingEntries = await query.getMany();
-
-    const startMinutes = this.timeToMinutes(startTime);
-    const endMinutes = this.timeToMinutes(endTime);
-
-    for (const entry of existingEntries) {
-      const existingStart = this.timeToMinutes(entry.startTime);
-      const existingEnd = this.timeToMinutes(entry.endTime);
-
-      // Check for overlap
-      if (
-        (startMinutes >= existingStart && startMinutes < existingEnd) ||
-        (endMinutes > existingStart && endMinutes <= existingEnd) ||
-        (startMinutes <= existingStart && endMinutes >= existingEnd)
-      ) {
-        return true; // Conflict found
-      }
+    if (userRole === 'student') {
+      // Students can only view their own group
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['group'],
+      });
+      return user?.group?.id === groupId;
     }
 
-    return false; // No conflict
-  }
+    if (userRole === 'department_head') {
+      // Department heads can access groups in their department
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
 
-  private async checkRoomConflict(
-    roomId: string,
-    date: Date,
-    startTime: string,
-    endTime: string,
-    excludeId?: string
-  ): Promise<boolean> {
-    const query = this.timetableRepository
-      .createQueryBuilder('timetable')
-      .where('timetable.roomId = :roomId', { roomId })
-      .andWhere('timetable.date = :date', { date });
+      const group = await this.groupRepository.findOne({
+        where: { id: groupId },
+        relations: ['level', 'level.specialty', 'level.specialty.department'],
+      });
 
-    if (excludeId) {
-      query.andWhere('timetable.id != :excludeId', { excludeId });
+      return user?.department?.id === group?.level?.specialty?.department?.id;
     }
 
-    const existingEntries = await query.getMany();
-
-    const startMinutes = this.timeToMinutes(startTime);
-    const endMinutes = this.timeToMinutes(endTime);
-
-    for (const entry of existingEntries) {
-      const existingStart = this.timeToMinutes(entry.startTime);
-      const existingEnd = this.timeToMinutes(entry.endTime);
-
-      if (
-        (startMinutes >= existingStart && startMinutes < existingEnd) ||
-        (endMinutes > existingStart && endMinutes <= existingEnd) ||
-        (startMinutes <= existingStart && endMinutes >= existingEnd)
-      ) {
-        return true; // Conflict found
-      }
+    if (userRole === 'teacher') {
+      // Teachers can view schedules where they teach
+      const count = await this.timetableRepository.count({
+        where: { teacher: { id: userId }, group: { id: groupId } },
+      });
+      return count > 0;
     }
 
     return false;
   }
 
-  private async checkGroupConflict(
+  // Check if user can edit a specific group's schedule
+  async canEditGroup(userId: string, userRole: string, groupId: string): Promise<boolean> {
+    if (userRole === 'admin') {
+      return true;
+    }
+
+    if (userRole === 'department_head') {
+      // Department heads can edit groups in their department
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+
+      const group = await this.groupRepository.findOne({
+        where: { id: groupId },
+        relations: ['level', 'level.specialty', 'level.specialty.department'],
+      });
+
+      return user?.department?.id === group?.level?.specialty?.department?.id;
+    }
+
+    return false; // Students and teachers cannot edit
+  }
+
+  private async checkTimeConflict(
+    semesterId: string,
     groupId: string,
-    date: Date,
+    dayOfWeek: DayOfWeek,
     startTime: string,
     endTime: string,
     excludeId?: string
-  ): Promise<boolean> {
+  ): Promise<{ hasConflict: boolean; conflictWith?: Timetable }> {
     const query = this.timetableRepository
       .createQueryBuilder('timetable')
-      .where('timetable.groupId = :groupId', { groupId })
-      .andWhere('timetable.date = :date', { date });
+      .leftJoinAndSelect('timetable.subject', 'subject')
+      .leftJoinAndSelect('timetable.teacher', 'teacher')
+      .leftJoinAndSelect('timetable.room', 'room')
+      .where('timetable.semesterId = :semesterId', { semesterId })
+      .andWhere('timetable.groupId = :groupId', { groupId })
+      .andWhere('timetable.dayOfWeek = :dayOfWeek', { dayOfWeek });
 
     if (excludeId) {
       query.andWhere('timetable.id != :excludeId', { excludeId });
@@ -132,132 +128,241 @@ export class TimetableService {
       const existingStart = this.timeToMinutes(entry.startTime);
       const existingEnd = this.timeToMinutes(entry.endTime);
 
+      // Check for time overlap
       if (
         (startMinutes >= existingStart && startMinutes < existingEnd) ||
         (endMinutes > existingStart && endMinutes <= existingEnd) ||
         (startMinutes <= existingStart && endMinutes >= existingEnd)
       ) {
-        return true; // Conflict found
+        return { hasConflict: true, conflictWith: entry };
       }
     }
 
-    return false;
+    return { hasConflict: false };
   }
 
-  async create(data: {
-    date: string;
-    startTime: string;
-    endTime: string;
-    subjectId: string;
-    teacherId: string;
-    roomId: string;
-    groupId: string;
-    sessionType: 'lecture' | 'td' | 'tp' | 'exam' | 'makeup';
-    notes?: string;
-  }): Promise<Timetable> {
+  async create(
+    data: {
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      subjectId: string;
+      teacherId: string;
+      roomId: string;
+      groupId: string;
+      semesterId: string;
+      sessionType: string;
+      notes?: string;
+    },
+    userId?: string,
+    userRole?: string
+  ): Promise<Timetable> {
+    // Check edit permission
+    if (userId && userRole) {
+      const canEdit = await this.canEditGroup(userId, userRole, data.groupId);
+      if (!canEdit) {
+        throw new AppError(403, 'You do not have permission to edit this schedule');
+      }
+    }
+
     // Validate entities exist
-    const subject = await this.subjectRepository.findOne({
-      where: { id: data.subjectId },
-    });
-    if (!subject) {
-      throw new AppError('Subject not found', 404);
-    }
+    const [subject, teacher, room, group, semester] = await Promise.all([
+      this.subjectRepository.findOne({ where: { id: data.subjectId } }),
+      this.userRepository.findOne({ where: { id: data.teacherId } }),
+      this.roomRepository.findOne({ where: { id: data.roomId } }),
+      this.groupRepository.findOne({ where: { id: data.groupId } }),
+      this.semesterRepository.findOne({ where: { id: data.semesterId } }),
+    ]);
 
-    const teacher = await this.userRepository.findOne({
-      where: { id: data.teacherId },
-    });
-    if (!teacher || (teacher.role !== 'teacher' && teacher.role !== 'department_head')) {
-      throw new AppError('Teacher not found or invalid role', 404);
-    }
+    if (!subject) throw new AppError(404, 'Subject not found');
+    if (!teacher) throw new AppError(404, 'Teacher not found');
+    if (!room) throw new AppError(404, 'Room not found');
+    if (!group) throw new AppError(404, 'Group not found');
+    if (!semester) throw new AppError(404, 'Semester not found');
 
-    const room = await this.roomRepository.findOne({
-      where: { id: data.roomId },
-    });
-    if (!room) {
-      throw new AppError('Room not found', 404);
-    }
-
-    const group = await this.groupRepository.findOne({
-      where: { id: data.groupId },
-      relations: ['students'],
-    });
-    if (!group) {
-      throw new AppError('Group not found', 404);
-    }
-
-    // Validate time format
-    if (!/^\d{2}:\d{2}$/.test(data.startTime) || !/^\d{2}:\d{2}$/.test(data.endTime)) {
-      throw new AppError('Invalid time format. Use HH:MM', 400);
-    }
-
-    // Validate start time is before end time
-    if (this.timeToMinutes(data.startTime) >= this.timeToMinutes(data.endTime)) {
-      throw new AppError('Start time must be before end time', 400);
-    }
-
-    // Parse date
-    const date = new Date(data.date);
-    if (isNaN(date.getTime())) {
-      throw new AppError('Invalid date format', 400);
-    }
-
-    // Check for conflicts
-    const teacherConflict = await this.checkTeacherConflict(
-      data.teacherId,
-      date,
-      data.startTime,
-      data.endTime
-    );
-    if (teacherConflict) {
-      throw new AppError(
-        'Teacher has a conflicting schedule at this time',
-        409
-      );
-    }
-
-    const roomConflict = await this.checkRoomConflict(
-      data.roomId,
-      date,
-      data.startTime,
-      data.endTime
-    );
-    if (roomConflict) {
-      throw new AppError(
-        'Room is already booked at this time',
-        409
-      );
-    }
-
-    const groupConflict = await this.checkGroupConflict(
+    // Check for time conflicts
+    const conflict = await this.checkTimeConflict(
+      data.semesterId,
       data.groupId,
-      date,
+      data.dayOfWeek,
       data.startTime,
       data.endTime
     );
-    if (groupConflict) {
+
+    if (conflict.hasConflict) {
       throw new AppError(
-        'Group has a conflicting schedule at this time',
-        409
+        409,
+        `Time conflict: This slot overlaps with ${conflict.conflictWith?.subject?.name} at ${conflict.conflictWith?.startTime}-${conflict.conflictWith?.endTime}`
       );
     }
 
-    // Check room capacity vs group size
-    if (group.students && group.students.length > room.capacity) {
-      throw new AppError(
-        `Room capacity (${room.capacity}) is insufficient for group size (${group.students.length})`,
-        400
-      );
-    }
-
-    // Create timetable entry
     const timetable = this.timetableRepository.create({
-      date,
+      dayOfWeek: data.dayOfWeek,
       startTime: data.startTime,
       endTime: data.endTime,
       subject,
       teacher,
       room,
       group,
+      semester,
+      sessionType: data.sessionType as any,
+      notes: data.notes,
+    });
+
+    return await this.timetableRepository.save(timetable);
+  }
+
+  async getByGroup(
+    groupId: string,
+    semesterId?: string,
+    userId?: string,
+    userRole?: string
+  ): Promise<Timetable[]> {
+    // Check access permission
+    if (userId && userRole) {
+      const canAccess = await this.canAccessGroup(userId, userRole, groupId);
+      if (!canAccess) {
+        throw new AppError(403, 'You do not have permission to view this schedule');
+      }
+    }
+
+    const query = this.timetableRepository
+      .createQueryBuilder('timetable')
+      .leftJoinAndSelect('timetable.subject', 'subject')
+      .leftJoinAndSelect('timetable.teacher', 'teacher')
+      .leftJoinAndSelect('timetable.room', 'room')
+      .leftJoinAndSelect('timetable.group', 'group')
+      .leftJoinAndSelect('timetable.semester', 'semester')
+      .where('timetable.groupId = :groupId', { groupId });
+
+    if (semesterId) {
+      query.andWhere('timetable.semesterId = :semesterId', { semesterId });
+    } else {
+      // Get active semester if not specified
+      const activeSemester = await this.semesterRepository.findOne({
+        where: { isActive: true },
+      });
+      if (activeSemester) {
+        query.andWhere('timetable.semesterId = :semesterId', {
+          semesterId: activeSemester.id,
+        });
+      }
+    }
+
+    return await query.orderBy('timetable.dayOfWeek').addOrderBy('timetable.startTime').getMany();
+  }
+
+  async getById(id: string, userId?: string, userRole?: string): Promise<Timetable> {
+    const timetable = await this.timetableRepository.findOne({
+      where: { id },
+      relations: ['subject', 'teacher', 'room', 'group', 'semester'],
+    });
+
+    if (!timetable) {
+      throw new AppError(404, 'Timetable entry not found');
+    }
+
+    // Check access permission
+    if (userId && userRole) {
+      const canAccess = await this.canAccessGroup(userId, userRole, timetable.group.id);
+      if (!canAccess) {
+        throw new AppError(403, 'You do not have permission to view this schedule');
+      }
+    }
+
+    return timetable;
+  }
+
+  async update(
+    id: string,
+    data: Partial<{
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      subjectId: string;
+      teacherId: string;
+      roomId: string;
+      groupId: string;
+      semesterId: string;
+      sessionType: string;
+      notes: string;
+    }>,
+    userId?: string,
+    userRole?: string
+  ): Promise<Timetable> {
+    const timetable = await this.getById(id);
+
+    // Check edit permission
+    if (userId && userRole) {
+      const canEdit = await this.canEditGroup(userId, userRole, timetable.group.id);
+      if (!canEdit) {
+        throw new AppError(403, 'You do not have permission to edit this schedule');
+      }
+    }
+
+    // Validate entities if being updated
+    if (data.subjectId) {
+      const subject = await this.subjectRepository.findOne({
+        where: { id: data.subjectId },
+      });
+      if (!subject) throw new AppError(404, 'Subject not found');
+      timetable.subject = subject;
+    }
+
+    if (data.teacherId) {
+      const teacher = await this.userRepository.findOne({
+        where: { id: data.teacherId },
+      });
+      if (!teacher) throw new AppError(404, 'Teacher not found');
+      timetable.teacher = teacher;
+    }
+
+    if (data.roomId) {
+      const room = await this.roomRepository.findOne({ where: { id: data.roomId } });
+      if (!room) throw new AppError(404, 'Room not found');
+      timetable.room = room;
+    }
+
+    if (data.groupId) {
+      const group = await this.groupRepository.findOne({
+        where: { id: data.groupId },
+      });
+      if (!group) throw new AppError(404, 'Group not found');
+      timetable.group = group;
+    }
+
+    if (data.semesterId) {
+      const semester = await this.semesterRepository.findOne({
+        where: { id: data.semesterId },
+      });
+      if (!semester) throw new AppError(404, 'Semester not found');
+      timetable.semester = semester;
+    }
+
+    // Check for conflicts if time or day is changing
+    if (data.dayOfWeek || data.startTime || data.endTime) {
+      const conflict = await this.checkTimeConflict(
+        data.semesterId || timetable.semester.id,
+        data.groupId || timetable.group.id,
+        data.dayOfWeek || timetable.dayOfWeek,
+        data.startTime || timetable.startTime,
+        data.endTime || timetable.endTime,
+        id
+      );
+
+      if (conflict.hasConflict) {
+        throw new AppError(
+          409,
+          `Time conflict: This slot overlaps with ${conflict.conflictWith?.subject?.name}`
+        );
+      }
+    }
+
+    // Update simple fields
+    Object.assign(timetable, {
+      dayOfWeek: data.dayOfWeek,
+      startTime: data.startTime,
+      endTime: data.endTime,
       sessionType: data.sessionType,
       notes: data.notes,
     });
@@ -265,340 +370,78 @@ export class TimetableService {
     return await this.timetableRepository.save(timetable);
   }
 
-  async getAll(filters?: {
-    teacherId?: string;
-    groupId?: string;
-    roomId?: string;
-    subjectId?: string;
-    startDate?: string;
-    endDate?: string;
-    sessionType?: string;
-  }): Promise<Timetable[]> {
-    const query = this.timetableRepository
-      .createQueryBuilder('timetable')
-      .leftJoinAndSelect('timetable.subject', 'subject')
-      .leftJoinAndSelect('timetable.teacher', 'teacher')
-      .leftJoinAndSelect('timetable.room', 'room')
-      .leftJoinAndSelect('timetable.group', 'group')
-      .orderBy('timetable.date', 'ASC')
-      .addOrderBy('timetable.startTime', 'ASC');
-
-    if (filters?.teacherId) {
-      query.andWhere('timetable.teacherId = :teacherId', {
-        teacherId: filters.teacherId,
-      });
-    }
-
-    if (filters?.groupId) {
-      query.andWhere('timetable.groupId = :groupId', {
-        groupId: filters.groupId,
-      });
-    }
-
-    if (filters?.roomId) {
-      query.andWhere('timetable.roomId = :roomId', {
-        roomId: filters.roomId,
-      });
-    }
-
-    if (filters?.subjectId) {
-      query.andWhere('timetable.subjectId = :subjectId', {
-        subjectId: filters.subjectId,
-      });
-    }
-
-    if (filters?.sessionType) {
-      query.andWhere('timetable.sessionType = :sessionType', {
-        sessionType: filters.sessionType,
-      });
-    }
-
-    if (filters?.startDate) {
-      query.andWhere('timetable.date >= :startDate', {
-        startDate: new Date(filters.startDate),
-      });
-    }
-
-    if (filters?.endDate) {
-      query.andWhere('timetable.date <= :endDate', {
-        endDate: new Date(filters.endDate),
-      });
-    }
-
-    return await query.getMany();
-  }
-
-  async getById(id: string): Promise<Timetable> {
-    const timetable = await this.timetableRepository.findOne({
-      where: { id },
-      relations: [
-        'subject',
-        'subject.specialty',
-        'subject.level',
-        'teacher',
-        'room',
-        'group',
-        'group.level',
-        'absences',
-      ],
-    });
-
-    if (!timetable) {
-      throw new AppError('Timetable entry not found', 404);
-    }
-
-    return timetable;
-  }
-
-  async getStudentSchedule(
-    studentId: string,
-    startDate?: string,
-    endDate?: string
-  ): Promise<Timetable[]> {
-    // Get student's group
-    const student = await this.userRepository.findOne({
-      where: { id: studentId },
-      relations: ['group'],
-    });
-
-    if (!student) {
-      throw new AppError('Student not found', 404);
-    }
-
-    if (!student.group) {
-      return []; // Student not assigned to any group
-    }
-
-    const filters: any = {
-      groupId: student.group.id,
-    };
-
-    if (startDate) filters.startDate = startDate;
-    if (endDate) filters.endDate = endDate;
-
-    return await this.getAll(filters);
-  }
-
-  async update(
-    id: string,
-    data: {
-      date?: string;
-      startTime?: string;
-      endTime?: string;
-      subjectId?: string;
-      teacherId?: string;
-      roomId?: string;
-      groupId?: string;
-      sessionType?: 'lecture' | 'td' | 'tp' | 'exam' | 'makeup';
-      notes?: string;
-    }
-  ): Promise<Timetable> {
+  async delete(id: string, userId?: string, userRole?: string): Promise<void> {
     const timetable = await this.getById(id);
 
-    // Prepare updated values
-    const updatedDate = data.date ? new Date(data.date) : timetable.date;
-    const updatedStartTime = data.startTime || timetable.startTime;
-    const updatedEndTime = data.endTime || timetable.endTime;
-    const updatedTeacherId = data.teacherId || timetable.teacher.id;
-    const updatedRoomId = data.roomId || timetable.room.id;
-    const updatedGroupId = data.groupId || timetable.group.id;
-
-    // Validate time if changed
-    if (data.startTime || data.endTime) {
-      if (this.timeToMinutes(updatedStartTime) >= this.timeToMinutes(updatedEndTime)) {
-        throw new AppError('Start time must be before end time', 400);
+    // Check edit permission
+    if (userId && userRole) {
+      const canEdit = await this.canEditGroup(userId, userRole, timetable.group.id);
+      if (!canEdit) {
+        throw new AppError(403, 'You do not have permission to delete this schedule entry');
       }
-    }
-
-    // Check conflicts if time, date, teacher, room, or group changed
-    if (
-      data.date ||
-      data.startTime ||
-      data.endTime ||
-      data.teacherId ||
-      data.roomId ||
-      data.groupId
-    ) {
-      if (data.teacherId || data.startTime || data.endTime || data.date) {
-        const teacherConflict = await this.checkTeacherConflict(
-          updatedTeacherId,
-          updatedDate,
-          updatedStartTime,
-          updatedEndTime,
-          id
-        );
-        if (teacherConflict) {
-          throw new AppError(
-            'Teacher has a conflicting schedule at this time',
-            409
-          );
-        }
-      }
-
-      if (data.roomId || data.startTime || data.endTime || data.date) {
-        const roomConflict = await this.checkRoomConflict(
-          updatedRoomId,
-          updatedDate,
-          updatedStartTime,
-          updatedEndTime,
-          id
-        );
-        if (roomConflict) {
-          throw new AppError('Room is already booked at this time', 409);
-        }
-      }
-
-      if (data.groupId || data.startTime || data.endTime || data.date) {
-        const groupConflict = await this.checkGroupConflict(
-          updatedGroupId,
-          updatedDate,
-          updatedStartTime,
-          updatedEndTime,
-          id
-        );
-        if (groupConflict) {
-          throw new AppError(
-            'Group has a conflicting schedule at this time',
-            409
-          );
-        }
-      }
-    }
-
-    // Update entities if IDs changed
-    if (data.subjectId && data.subjectId !== timetable.subject.id) {
-      const subject = await this.subjectRepository.findOne({
-        where: { id: data.subjectId },
-      });
-      if (!subject) {
-        throw new AppError('Subject not found', 404);
-      }
-      timetable.subject = subject;
-    }
-
-    if (data.teacherId && data.teacherId !== timetable.teacher.id) {
-      const teacher = await this.userRepository.findOne({
-        where: { id: data.teacherId },
-      });
-      if (!teacher || (teacher.role !== 'teacher' && teacher.role !== 'department_head')) {
-        throw new AppError('Teacher not found or invalid role', 404);
-      }
-      timetable.teacher = teacher;
-    }
-
-    if (data.roomId && data.roomId !== timetable.room.id) {
-      const room = await this.roomRepository.findOne({
-        where: { id: data.roomId },
-      });
-      if (!room) {
-        throw new AppError('Room not found', 404);
-      }
-      timetable.room = room;
-    }
-
-    if (data.groupId && data.groupId !== timetable.group.id) {
-      const group = await this.groupRepository.findOne({
-        where: { id: data.groupId },
-        relations: ['students'],
-      });
-      if (!group) {
-        throw new AppError('Group not found', 404);
-      }
-      timetable.group = group;
-
-      // Check capacity
-      if (group.students && group.students.length > timetable.room.capacity) {
-        throw new AppError(
-          `Room capacity (${timetable.room.capacity}) is insufficient for group size (${group.students.length})`,
-          400
-        );
-      }
-    }
-
-    // Update simple fields
-    if (data.date) timetable.date = updatedDate;
-    if (data.startTime) timetable.startTime = data.startTime;
-    if (data.endTime) timetable.endTime = data.endTime;
-    if (data.sessionType) timetable.sessionType = data.sessionType;
-    if (data.notes !== undefined) timetable.notes = data.notes;
-
-    return await this.timetableRepository.save(timetable);
-  }
-
-  async delete(id: string): Promise<void> {
-    const timetable = await this.timetableRepository.findOne({
-      where: { id },
-      relations: ['absences'],
-    });
-
-    if (!timetable) {
-      throw new AppError('Timetable entry not found', 404);
-    }
-
-    // Check if there are recorded absences
-    if (timetable.absences && timetable.absences.length > 0) {
-      throw new AppError(
-        'Cannot delete timetable entry with recorded absences. Please delete absences first.',
-        400
-      );
     }
 
     await this.timetableRepository.remove(timetable);
   }
 
-  async checkAvailability(data: {
-    teacherId?: string;
-    roomId?: string;
-    groupId?: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-  }): Promise<{
-    available: boolean;
-    conflicts: string[];
-  }> {
-    const date = new Date(data.date);
-    const conflicts: string[] = [];
-
-    if (data.teacherId) {
-      const hasConflict = await this.checkTeacherConflict(
-        data.teacherId,
-        date,
-        data.startTime,
-        data.endTime
-      );
-      if (hasConflict) {
-        conflicts.push('Teacher is not available at this time');
-      }
+  // Get all groups accessible to a user
+  async getAccessibleGroups(userId: string, userRole: string): Promise<Group[]> {
+    if (userRole === 'admin') {
+      return await this.groupRepository.find({
+        relations: ['level', 'level.specialty', 'level.specialty.department'],
+        order: { code: 'ASC' },
+      });
     }
 
-    if (data.roomId) {
-      const hasConflict = await this.checkRoomConflict(
-        data.roomId,
-        date,
-        data.startTime,
-        data.endTime
-      );
-      if (hasConflict) {
-        conflicts.push('Room is already booked at this time');
-      }
+    if (userRole === 'department_head') {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+
+      if (!user?.department) return [];
+
+      const groups = await this.groupRepository
+        .createQueryBuilder('group')
+        .leftJoinAndSelect('group.level', 'level')
+        .leftJoinAndSelect('level.specialty', 'specialty')
+        .leftJoinAndSelect('specialty.department', 'department')
+        .where('department.id = :departmentId', {
+          departmentId: user.department.id,
+        })
+        .orderBy('group.code', 'ASC')
+        .getMany();
+
+      return groups;
     }
 
-    if (data.groupId) {
-      const hasConflict = await this.checkGroupConflict(
-        data.groupId,
-        date,
-        data.startTime,
-        data.endTime
-      );
-      if (hasConflict) {
-        conflicts.push('Group has a conflicting schedule at this time');
-      }
+    if (userRole === 'student') {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['group', 'group.level', 'group.level.specialty', 'group.level.specialty.department'],
+      });
+
+      return user?.group ? [user.group] : [];
     }
 
-    return {
-      available: conflicts.length === 0,
-      conflicts,
-    };
+    if (userRole === 'teacher') {
+      // Get all groups where this teacher has classes
+      const timetables = await this.timetableRepository.find({
+        where: { teacher: { id: userId } },
+        relations: ['group', 'group.level', 'group.level.specialty', 'group.level.specialty.department'],
+      });
+
+      // Deduplicate groups
+      const groupMap = new Map<string, Group>();
+      timetables.forEach((t) => {
+        if (t.group) {
+          groupMap.set(t.group.id, t.group);
+        }
+      });
+
+      return Array.from(groupMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+    }
+
+    return [];
   }
 }

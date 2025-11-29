@@ -47,7 +47,7 @@ docker-compose down
 - 🔐 **JWT Authentication** - Secure token-based authentication with refresh tokens
 - 👥 **User Management** - Complete CRUD with role-based access control (Admin, Teacher, Student, Dept Head)
 - 📚 **Academic Management** - Departments, Specialties, Levels, Groups, Subjects
-- 📅 **Timetable System** - Scheduling with triple conflict detection (teacher, room, group)
+- 📅 **Schedule System** - Semester-based weekly class schedules with role-based permissions
 - ✅ **Absence Tracking** - Automatic monitoring with email notifications and excuse workflow
 - 💬 **Messaging System** - User-to-user messaging with conversation threading
 - 🔔 **Notifications** - Multi-type notifications with read status tracking
@@ -162,13 +162,25 @@ POST   /api/subjects/:id/assign-teacher/:teacherId
 DELETE /api/subjects/:id/unassign-teacher/:teacherId
 ```
 
-### Timetable (8 endpoints)
+### Semesters (6 endpoints)
 ```
-GET    /api/timetable                    Get all sessions
-GET    /api/timetable/my-schedule        Get my schedule
-GET    /api/timetable/group/:id          Get group schedule
-POST   /api/timetable/check-availability Check conflicts
-+ Standard CRUD operations
+GET    /api/v1/semesters                 Get all semesters
+GET    /api/v1/semesters/active          Get active semester
+GET    /api/v1/semesters/:id             Get semester by ID
+POST   /api/v1/semesters                 Create semester
+PUT    /api/v1/semesters/:id             Update semester
+PATCH  /api/v1/semesters/:id/activate    Set active semester
+DELETE /api/v1/semesters/:id             Delete semester
+```
+
+### Schedule (6 endpoints)
+```
+GET    /api/v1/timetable/accessible-groups  Get groups user can access
+GET    /api/v1/timetable/group/:groupId     Get group schedule
+GET    /api/v1/timetable/:id                Get schedule entry by ID
+POST   /api/v1/timetable                    Create schedule entry
+PUT    /api/v1/timetable/:id                Update schedule entry
+DELETE /api/v1/timetable/:id                Delete schedule entry
 ```
 
 ### Absences (9 endpoints)
