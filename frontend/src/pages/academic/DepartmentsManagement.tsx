@@ -3,12 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { departmentService } from '../../services/academicService';
 import { Building2, Plus, Edit2, Trash2, Search, X, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function DepartmentsManagement() {
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingDept, setEditingDept] = useState<any | null>(null);
   const queryClient = useQueryClient();
+  
+  const isAdmin = user?.role === 'admin';
+  const isDeptHead = user?.role === 'department_head';
 
   const { data: departments = [], isLoading } = useQuery({
     queryKey: ['departments'],
@@ -46,11 +51,17 @@ export default function DepartmentsManagement() {
     onError: () => toast.error('Failed to delete'),
   });
 
-  const filteredDepartments = Array.isArray(departments) ? departments.filter((dept: any) =>
-    dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    dept.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    dept.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) : [];
+  // Filter departments based on role
+  const filteredDepartments = Array.isArray(departments) ? departments.filter((dept: any) => {
+    // Department heads only see their own department
+    if (isDeptHead && user?.department?.id && dept.id !== user.department.id) {
+      return false;
+    }
+    // Apply search filter
+    return dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dept.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dept.description?.toLowerCase().includes(searchTerm.toLowerCase());
+  }) : [];
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -85,15 +96,19 @@ export default function DepartmentsManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Departments</h1>
-          <p className="mt-1 text-gray-600">Manage academic departments</p>
+          <p className="mt-1 text-gray-600">
+            {isDeptHead ? 'View your department information' : 'Manage academic departments'}
+          </p>
         </div>
-        <button
-          onClick={() => { setEditingDept(null); setShowModal(true); }}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Add Department
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => { setEditingDept(null); setShowModal(true); }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Add Department
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -128,20 +143,22 @@ export default function DepartmentsManagement() {
                     {dept.code && <p className="text-sm text-gray-500">{dept.code}</p>}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setEditingDept(dept); setShowModal(true); }}
-                    className="p-1 text-primary-600 hover:bg-primary-50 rounded"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => window.confirm('Delete this department?') && deleteMutation.mutate(dept.id)}
-                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setEditingDept(dept); setShowModal(true); }}
+                      className="p-1 text-primary-600 hover:bg-primary-50 rounded"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => window.confirm('Delete this department?') && deleteMutation.mutate(dept.id)}
+                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {dept.description && (

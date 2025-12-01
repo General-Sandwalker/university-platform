@@ -3,12 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupService, levelService } from '../../services/academicService';
 import { Users, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function GroupsManagement() {
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const queryClient = useQueryClient();
+  
+  const isAdmin = user?.role === 'admin';
+  const isDeptHead = user?.role === 'department_head';
 
   const { data: groups = [], isLoading } = useQuery({ queryKey: ['groups'], queryFn: groupService.getAll });
   const { data: levels = [] } = useQuery({ queryKey: ['levels'], queryFn: levelService.getAll });
@@ -16,20 +21,40 @@ export default function GroupsManagement() {
   const createMutation = useMutation({
     mutationFn: groupService.create,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group created'); setShowModal(false); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create group');
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => groupService.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group updated'); setShowModal(false); setEditing(null); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update group');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: groupService.delete,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['groups'] }); toast.success('Group deleted'); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete group');
+    },
   });
 
-  const filtered = groups.filter((g: any) => g.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
+  // Filter groups by department for department heads
+  const filtered = groups.filter((g: any) => {
+    // Department heads only see their own department's groups
+    if (isDeptHead && user?.department?.id && g.level?.specialty?.department?.id !== user?.department?.id) {
+      return false;
+    }
+    return g.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+  
+  // Filter levels for dropdown - dept heads only see their department
+  const availableLevels = isDeptHead && user?.department?.id
+    ? levels.filter((lv: any) => lv.specialty?.department?.id === user?.department?.id)
+    : levels;
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -106,7 +131,7 @@ export default function GroupsManagement() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Level *</label>
                     <select name="levelId" defaultValue={editing?.level?.id} required className="input">
                       <option value="">Select Level</option>
-                      {levels.map((l: any) => <option key={l.id} value={l.id}>{l.name} - {l.specialty?.name}</option>)}
+                      {availableLevels.map((l: any) => <option key={l.id} value={l.id}>{l.name} - {l.specialty?.name}</option>)}
                     </select>
                   </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Max Capacity *</label><input type="number" name="capacity" defaultValue={editing?.maxCapacity || editing?.capacity || 30} min="1" max="200" required className="input" /></div>

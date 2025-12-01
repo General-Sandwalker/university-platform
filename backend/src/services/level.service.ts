@@ -2,15 +2,18 @@ import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { Level } from '../entities/Level';
 import { Specialty } from '../entities/Specialty';
+import { User } from '../entities/User';
 import { AppError } from '../middleware/errorHandler';
 
 export class LevelService {
   private levelRepository: Repository<Level>;
   private specialtyRepository: Repository<Specialty>;
+  private userRepository: Repository<User>;
 
   constructor() {
     this.levelRepository = AppDataSource.getRepository(Level);
     this.specialtyRepository = AppDataSource.getRepository(Specialty);
+    this.userRepository = AppDataSource.getRepository(User);
   }
 
   async create(data: {
@@ -18,11 +21,29 @@ export class LevelService {
     code: string;
     specialtyId: string;
     year: number;
-  }): Promise<Level> {
+  }, userId?: string, userRole?: string): Promise<Level> {
     // Check if specialty exists
     const specialty = await this.specialtyRepository.findOne({
       where: { id: data.specialtyId },
+      relations: ['department'],
     });
+
+    if (!specialty) {
+      throw new AppError('Specialty not found', 404);
+    }
+
+    // Department head authorization: can only create levels for specialties in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !specialty.department || 
+          user.department.id !== specialty.department.id) {
+        throw new AppError('You can only create levels for specialties in your department', 403);
+      }
+    }
 
     if (!specialty) {
       throw new AppError('Specialty not found', 404);
@@ -98,9 +119,36 @@ export class LevelService {
       code?: string;
       specialtyId?: string;
       year?: number;
-    }
+    },
+    userId?: string,
+    userRole?: string
   ): Promise<Level> {
     const level = await this.getById(id);
+
+    // Department head authorization: can only update levels in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !level.specialty?.department || 
+          user.department.id !== level.specialty.department.id) {
+        throw new AppError('You can only update levels in your department', 403);
+      }
+      
+      // If changing specialty, verify new specialty is also in their department
+      if (data.specialtyId && data.specialtyId !== level.specialty.id) {
+        const newSpecialty = await this.specialtyRepository.findOne({
+          where: { id: data.specialtyId },
+          relations: ['department'],
+        });
+        
+        if (!newSpecialty?.department || newSpecialty.department.id !== user.department.id) {
+          throw new AppError('You can only assign levels to specialties in your department', 403);
+        }
+      }
+    }
 
     // Check if new code conflicts with existing level in the same specialty
     if (data.code && data.code !== level.code) {
@@ -137,14 +185,27 @@ export class LevelService {
     return await this.levelRepository.save(level);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, userId?: string, userRole?: string): Promise<void> {
     const level = await this.levelRepository.findOne({
       where: { id },
-      relations: ['groups'],
+      relations: ['groups', 'specialty', 'specialty.department'],
     });
 
     if (!level) {
       throw new AppError('Level not found', 404);
+    }
+
+    // Department head authorization: can only delete levels in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !level.specialty?.department || 
+          user.department.id !== level.specialty.department.id) {
+        throw new AppError('You can only delete levels in your department', 403);
+      }
     }
 
     // Check if level has associated groups

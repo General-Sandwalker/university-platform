@@ -2,15 +2,18 @@ import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { Specialty } from '../entities/Specialty';
 import { Department } from '../entities/Department';
+import { User } from '../entities/User';
 import { AppError } from '../middleware/errorHandler';
 
 export class SpecialtyService {
   private specialtyRepository: Repository<Specialty>;
   private departmentRepository: Repository<Department>;
+  private userRepository: Repository<User>;
 
   constructor() {
     this.specialtyRepository = AppDataSource.getRepository(Specialty);
     this.departmentRepository = AppDataSource.getRepository(Department);
+    this.userRepository = AppDataSource.getRepository(User);
   }
 
   async create(data: {
@@ -18,7 +21,7 @@ export class SpecialtyService {
     code: string;
     departmentId: string;
     description?: string;
-  }): Promise<Specialty> {
+  }, userId?: string, userRole?: string): Promise<Specialty> {
     // Check if department exists
     const department = await this.departmentRepository.findOne({
       where: { id: data.departmentId },
@@ -26,6 +29,18 @@ export class SpecialtyService {
 
     if (!department) {
       throw new AppError('Department not found', 404);
+    }
+
+    // Department head authorization: can only create specialties for their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || user.department.id !== data.departmentId) {
+        throw new AppError('You can only create specialties for your department', 403);
+      }
     }
 
     // Check if specialty code already exists
@@ -93,9 +108,28 @@ export class SpecialtyService {
       code?: string;
       departmentId?: string;
       description?: string;
-    }
+    },
+    userId?: string,
+    userRole?: string
   ): Promise<Specialty> {
     const specialty = await this.getById(id);
+
+    // Department head authorization: can only update specialties in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || user.department.id !== specialty.department.id) {
+        throw new AppError('You can only update specialties in your department', 403);
+      }
+      
+      // If changing department, verify new department is still their department (shouldn't be allowed anyway)
+      if (data.departmentId && data.departmentId !== specialty.department.id) {
+        throw new AppError('Department heads cannot change specialty department', 403);
+      }
+    }
 
     // Check if new code conflicts with existing specialty
     if (data.code && data.code !== specialty.code) {
@@ -128,14 +162,26 @@ export class SpecialtyService {
     return await this.specialtyRepository.save(specialty);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, userId?: string, userRole?: string): Promise<void> {
     const specialty = await this.specialtyRepository.findOne({
       where: { id },
-      relations: ['levels', 'subjects'],
+      relations: ['levels', 'subjects', 'department'],
     });
 
     if (!specialty) {
       throw new AppError('Specialty not found', 404);
+    }
+
+    // Department head authorization: can only delete specialties in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || user.department.id !== specialty.department.id) {
+        throw new AppError('You can only delete specialties in your department', 403);
+      }
     }
 
     // Check if specialty has associated levels or subjects

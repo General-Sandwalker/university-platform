@@ -48,6 +48,12 @@ export class Message {
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  isStarredBySender: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isStarredByReceiver: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -3,14 +3,17 @@ import { AppDataSource } from '../config/database';
 import { Message, MessageStatus } from '../entities/Message';
 import { User } from '../entities/User';
 import { AppError } from '../middleware/errorHandler';
+import { NotificationService } from './notification.service';
 
 export class MessageService {
   private messageRepository: Repository<Message>;
   private userRepository: Repository<User>;
+  private notificationService: NotificationService;
 
   constructor() {
     this.messageRepository = AppDataSource.getRepository(Message);
     this.userRepository = AppDataSource.getRepository(User);
+    this.notificationService = new NotificationService();
   }
 
   async sendMessage(data: {
@@ -49,7 +52,22 @@ export class MessageService {
       readAt: null,
     });
 
-    return await this.messageRepository.save(message);
+    const savedMessage = await this.messageRepository.save(message);
+
+    // Create notification for receiver
+    try {
+      await this.notificationService.create({
+        userId: receiver.id,
+        type: 'new_message',
+        title: 'New Message',
+        message: `You have a new message from ${sender.firstName} ${sender.lastName}`,
+      });
+    } catch (error) {
+      // Don't fail message send if notification fails
+      console.error('Failed to create message notification:', error);
+    }
+
+    return savedMessage;
   }
 
   async getConversation(
@@ -216,5 +234,42 @@ export class MessageService {
         readAt: IsNull(),
       },
     });
+  }
+
+  async toggleStar(messageId: string, userId: string): Promise<Message> {
+    const message = await this.messageRepository.findOne({
+      where: { id: messageId },
+      relations: ['sender', 'receiver'],
+    });
+
+    if (!message) {
+      throw new AppError(404, 'Message not found');
+    }
+
+    // Verify user is sender or receiver
+    if (message.sender.id !== userId && message.receiver.id !== userId) {
+      throw new AppError(403, 'Not authorized to star this message');
+    }
+
+    // Toggle star based on user role
+    if (message.sender.id === userId) {
+      message.isStarredBySender = !message.isStarredBySender;
+    } else {
+      message.isStarredByReceiver = !message.isStarredByReceiver;
+    }
+
+    return await this.messageRepository.save(message);
+  }
+
+  async markConversationAsRead(userId: string, otherUserId: string): Promise<void> {
+    await this.messageRepository
+      .createQueryBuilder()
+      .update(Message)
+      .set({ status: MessageStatus.READ, readAt: new Date() })
+      .where('receiverId = :userId AND senderId = :otherUserId AND readAt IS NULL', {
+        userId,
+        otherUserId,
+      })
+      .execute();
   }
 }

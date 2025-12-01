@@ -7,7 +7,7 @@ const groupService = new GroupService();
 
 export const createGroup = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const group = await groupService.create(req.body);
+    const group = await groupService.create(req.body, req.user?.userId, req.user?.role);
     res.status(201).json({
       success: true,
       data: group,
@@ -43,7 +43,7 @@ export const getGroupById = asyncHandler(
 
 export const updateGroup = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const group = await groupService.update(req.params.id, req.body);
+    const group = await groupService.update(req.params.id, req.body, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       data: group,
@@ -53,7 +53,7 @@ export const updateGroup = asyncHandler(
 
 export const deleteGroup = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    await groupService.delete(req.params.id);
+    await groupService.delete(req.params.id, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       message: 'Group deleted successfully',

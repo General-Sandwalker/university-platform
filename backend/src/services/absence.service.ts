@@ -6,16 +6,19 @@ import { Timetable } from '../entities/Timetable';
 import { AppError } from '../middleware/errorHandler';
 import { sendAbsenceWarningEmail, sendEliminationRiskEmail } from '../utils/email';
 import logger from '../utils/logger';
+import { NotificationService } from './notification.service';
 
 export class AbsenceService {
   private absenceRepository: Repository<Absence>;
   private userRepository: Repository<User>;
   private timetableRepository: Repository<Timetable>;
+  private notificationService: NotificationService;
 
   constructor() {
     this.absenceRepository = AppDataSource.getRepository(Absence);
     this.userRepository = AppDataSource.getRepository(User);
     this.timetableRepository = AppDataSource.getRepository(Timetable);
+    this.notificationService = new NotificationService();
   }
 
   async recordAbsence(data: {
@@ -150,7 +153,7 @@ export class AbsenceService {
   ): Promise<Absence> {
     const absence = await this.absenceRepository.findOne({
       where: { id: absenceId },
-      relations: ['student', 'timetableEntry', 'timetableEntry.subject'],
+      relations: ['student', 'timetableEntry', 'timetableEntry.subject', 'timetableEntry.teacher'],
     });
 
     if (!absence) {
@@ -175,7 +178,22 @@ export class AbsenceService {
     absence.status = 'pending';
     absence.excuseSubmittedAt = new Date();
 
-    return await this.absenceRepository.save(absence);
+    const savedAbsence = await this.absenceRepository.save(absence);
+
+    // Create notification for teacher
+    try {
+      await this.notificationService.create({
+        userId: absence.timetableEntry.teacher.id,
+        title: 'New Excuse Request',
+        message: `${absence.student.firstName} ${absence.student.lastName} submitted an excuse for ${absence.timetableEntry.subject.name}`,
+        type: 'system_announcement',
+        relatedId: savedAbsence.id,
+      });
+    } catch (error) {
+      logger.error('Failed to create notification for excuse submission:', error);
+    }
+
+    return savedAbsence;
   }
 
   async reviewExcuse(
@@ -188,6 +206,7 @@ export class AbsenceService {
       where: { id: absenceId },
       relations: [
         'student',
+        'student.department',
         'timetableEntry',
         'timetableEntry.subject',
         'timetableEntry.teacher',
@@ -201,16 +220,26 @@ export class AbsenceService {
     // Verify teacher is authorized (must be the course teacher or admin/dept head)
     const teacher = await this.userRepository.findOne({
       where: { id: teacherId },
+      relations: ['department'],
     });
 
     if (!teacher) {
       throw new AppError('Teacher not found', 404);
     }
 
-    const isAuthorized =
-      teacher.role === 'admin' ||
-      teacher.role === 'department_head' ||
-      absence.timetableEntry.teacher.id === teacherId;
+    let isAuthorized = false;
+    
+    if (teacher.role === 'admin') {
+      isAuthorized = true;
+    } else if (teacher.role === 'department_head') {
+      // Department head can only review excuses from their department
+      isAuthorized = teacher.department && 
+                     absence.student.department && 
+                     teacher.department.id === absence.student.department.id;
+    } else if (teacher.role === 'teacher') {
+      // Teacher can only review excuses from their classes
+      isAuthorized = absence.timetableEntry.teacher.id === teacherId;
+    }
 
     if (!isAuthorized) {
       throw new AppError('Not authorized to review this excuse', 403);
@@ -230,6 +259,21 @@ export class AbsenceService {
     absence.reviewedBy = teacher;
 
     const updatedAbsence = await this.absenceRepository.save(absence);
+
+    // Create notification for student
+    try {
+      const decisionText = decision === 'excused' ? 'approved' : 'rejected';
+      const notificationType = decision === 'excused' ? 'excuse_approved' : 'excuse_rejected';
+      await this.notificationService.create({
+        userId: absence.student.id,
+        title: `Excuse Request ${decisionText.charAt(0).toUpperCase() + decisionText.slice(1)}`,
+        message: `Your excuse for ${absence.timetableEntry.subject.name} was ${decisionText}${reviewNotes ? `: ${reviewNotes}` : ''}`,
+        type: notificationType,
+        relatedId: updatedAbsence.id,
+      });
+    } catch (error) {
+      logger.error('Failed to create notification for excuse review:', error);
+    }
 
     // If excuse was accepted, recheck elimination status
     if (decision === 'excused') {
@@ -275,16 +319,59 @@ export class AbsenceService {
     status?: 'unexcused' | 'pending' | 'excused' | 'rejected';
     startDate?: string;
     endDate?: string;
+    currentUserId?: string;
+    currentUserRole?: string;
   }): Promise<Absence[]> {
     const query = this.absenceRepository
       .createQueryBuilder('absence')
       .leftJoinAndSelect('absence.student', 'student')
+      .leftJoinAndSelect('student.department', 'studentDepartment')
       .leftJoinAndSelect('absence.timetableEntry', 'timetable')
       .leftJoinAndSelect('timetable.subject', 'subject')
       .leftJoinAndSelect('timetable.teacher', 'teacher')
       .leftJoinAndSelect('absence.reviewedBy', 'reviewedBy')
       .orderBy('absence.createdAt', 'DESC')
       .addOrderBy('timetable.startTime', 'DESC');
+
+    // Department head: only see absences from students in their department
+    if (filters?.currentUserRole === 'department_head' && filters?.currentUserId) {
+      const currentUser = await this.userRepository.findOne({
+        where: { id: filters.currentUserId },
+        relations: ['department'],
+      });
+      if (currentUser?.department) {
+        query.andWhere('student.departmentId = :departmentId', {
+          departmentId: currentUser.department.id,
+        });
+      }
+    }
+
+    // Teacher: only see absences from their own classes
+    if (filters?.currentUserRole === 'teacher' && filters?.currentUserId) {
+      query.andWhere('timetable.teacherId = :currentTeacherId', {
+        currentTeacherId: filters.currentUserId,
+      });
+    }
+
+    // Department head: only see absences from students in their department
+    if (filters?.currentUserRole === 'department_head' && filters?.currentUserId) {
+      const currentUser = await this.userRepository.findOne({
+        where: { id: filters.currentUserId },
+        relations: ['department'],
+      });
+      if (currentUser?.department) {
+        query.andWhere('student.departmentId = :departmentId', {
+          departmentId: currentUser.department.id,
+        });
+      }
+    }
+
+    // Teacher: only see absences from their own classes
+    if (filters?.currentUserRole === 'teacher' && filters?.currentUserId) {
+      query.andWhere('timetable.teacherId = :currentTeacherId', {
+        currentTeacherId: filters.currentUserId,
+      });
+    }
 
     if (filters?.studentId) {
       query.andWhere('absence.studentId = :studentId', {
@@ -335,7 +422,6 @@ export class AbsenceService {
         'timetableEntry.subject',
         'timetableEntry.teacher',
         'timetableEntry.room',
-        'recordedBy',
         'reviewedBy',
       ],
     });
@@ -393,26 +479,40 @@ export class AbsenceService {
   async deleteAbsence(id: string, deletedById: string): Promise<void> {
     const absence = await this.absenceRepository.findOne({
       where: { id },
-      relations: ['recordedBy'],
+      relations: ['student', 'student.department', 'timetableEntry', 'timetableEntry.teacher'],
     });
 
     if (!absence) {
       throw new AppError('Absence record not found', 404);
     }
 
-    // Only the teacher who recorded it or admin/dept_head can delete
+    // Get the user who is trying to delete
     const user = await this.userRepository.findOne({
       where: { id: deletedById },
+      relations: ['department'],
     });
 
     if (!user) {
       throw new AppError('User not found', 404);
     }
 
-    const isAuthorized =
-      user.role === 'admin' ||
-      user.role === 'department_head' ||
-      absence.recordedBy.id === deletedById;
+    // Authorization logic based on role
+    let isAuthorized = false;
+    
+    if (user.role === 'admin') {
+      isAuthorized = true;
+    } else if (user.role === 'department_head') {
+      // Department head can only delete absences from their department
+      isAuthorized = user.department && 
+                     absence.student.department && 
+                     user.department.id === absence.student.department.id;
+    } else if (user.role === 'teacher') {
+      // Teacher can only delete absences from their classes
+      isAuthorized = absence.timetableEntry?.teacher?.id === deletedById;
+    } else if (user.role === 'student') {
+      // Student can delete their own absence
+      isAuthorized = absence.student?.id === deletedById;
+    }
 
     if (!isAuthorized) {
       throw new AppError('Not authorized to delete this absence record', 403);
@@ -525,5 +625,12 @@ export class AbsenceService {
       studentsAtRisk,
       bySubject,
     };
+  }
+
+  async getUserWithDepartment(userId: string): Promise<User | null> {
+    return await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['department'],
+    });
   }
 }

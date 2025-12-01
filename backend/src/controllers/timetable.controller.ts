@@ -38,6 +38,25 @@ export const getTimetableByGroup = asyncHandler(
   }
 );
 
+export const getMyTeachingSchedule = asyncHandler(
+  async (req: AuthRequest, res: Response) => {
+    if (!req.user || req.user.role !== 'teacher') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only teachers can access this endpoint',
+      });
+    }
+
+    const semesterId = req.query.semesterId as string;
+    const timetables = await timetableService.getByTeacher(req.user.id, semesterId);
+
+    res.json({
+      success: true,
+      data: timetables,
+    });
+  }
+);
+
 export const getTimetableById = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const timetable = await timetableService.getById(

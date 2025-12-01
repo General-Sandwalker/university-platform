@@ -3,12 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { specialtyService, departmentService } from '../../services/academicService';
 import { GraduationCap, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function SpecialtiesManagement() {
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const queryClient = useQueryClient();
+  
+  const isAdmin = user?.role === 'admin';
+  const isDeptHead = user?.role === 'department_head';
 
   const { data: specialties = [], isLoading, error } = useQuery({
     queryKey: ['specialties'],
@@ -31,6 +36,9 @@ export default function SpecialtiesManagement() {
       toast.success('Specialty created');
       setShowModal(false);
     },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create specialty');
+    },
   });
 
   const updateMutation = useMutation({
@@ -42,6 +50,9 @@ export default function SpecialtiesManagement() {
       setShowModal(false);
       setEditing(null);
     },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update specialty');
+    },
   });
 
   const deleteMutation = useMutation({
@@ -50,12 +61,26 @@ export default function SpecialtiesManagement() {
       queryClient.invalidateQueries({ queryKey: ['specialties'] });
       toast.success('Specialty deleted');
     },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete specialty');
+    },
   });
 
-  const filtered = Array.isArray(specialties) ? specialties.filter((s: any) =>
-    s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.code?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) : [];
+  // Filter specialties by department for department heads
+  const filtered = Array.isArray(specialties) ? specialties.filter((s: any) => {
+    // Department heads only see their own department's specialties
+    if (isDeptHead && user?.department?.id && s.department?.id !== user.department.id) {
+      return false;
+    }
+    // Apply search filter
+    return s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.code?.toLowerCase().includes(searchTerm.toLowerCase());
+  }) : [];
+  
+  // Filter departments for dropdown - dept heads only see their department
+  const availableDepartments = isDeptHead && user?.department?.id 
+    ? departments.filter((d: any) => d.id === user?.department?.id)
+    : departments;
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -148,7 +173,7 @@ export default function SpecialtiesManagement() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
                     <select name="departmentId" defaultValue={editing?.department?.id} required className="input">
                       <option value="">Select Department</option>
-                      {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      {availableDepartments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Duration (Years) *</label><input type="number" name="durationYears" defaultValue={editing?.durationYears || 3} min="1" max="10" required className="input" /></div>

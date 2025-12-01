@@ -157,3 +157,32 @@ export const getUnreadCount = async (
     next(error);
   }
 };
+
+export const toggleStar = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = req.user!.id;
+    const message = await messageService.toggleStar(req.params.id, userId);
+    res.json(message);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const markConversationAsRead = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = req.user!.id;
+    const { otherUserId } = req.params;
+    await messageService.markConversationAsRead(userId, otherUserId);
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};

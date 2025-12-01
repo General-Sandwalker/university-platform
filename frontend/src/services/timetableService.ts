@@ -105,6 +105,12 @@ export const timetableService = {
     return response.data.data;
   },
 
+  getMyTeachingSchedule: async (semesterId?: string): Promise<TimetableEntry[]> => {
+    const params = semesterId ? { semesterId } : {};
+    const response = await api.get('/timetable/my-schedule', { params });
+    return response.data.data;
+  },
+
   create: async (data: CreateTimetableData): Promise<TimetableEntry> => {
     const response = await api.post('/timetable', data);
     return response.data.data;

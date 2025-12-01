@@ -12,6 +12,11 @@ export interface User {
   isEmailVerified: boolean;
   groupId?: string;
   specialtyId?: string;
+  department?: {
+    id: string;
+    name: string;
+    code?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

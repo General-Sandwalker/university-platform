@@ -46,6 +46,33 @@ const Dashboard = () => {
     },
   });
 
+  // Absence analytics (last 7 days)
+  const { data: absenceAnalytics } = useQuery({
+    queryKey: ['absence-analytics', '7d'],
+    queryFn: async () => {
+      const end = new Date();
+      const start = addDays(end, -6);
+      const response = await apiClient.get('/analytics/absence-analytics', {
+        params: {
+          startDate: start.toISOString().split('T')[0],
+          endDate: end.toISOString().split('T')[0],
+        },
+      });
+      return response.data.data || response.data;
+    },
+    enabled: !!user && (user.role === 'admin' || user.role === 'department_head'),
+  });
+
+  // User statistics for distribution chart
+  const { data: userStats } = useQuery({
+    queryKey: ['users-stats'],
+    queryFn: async () => {
+      const response = await apiClient.get('/users/stats');
+      return response.data.data || response.data;
+    },
+    enabled: !!user && user.role === 'admin',
+  });
+
   // Fetch today's schedule
   const { data: todaySchedule, isLoading: scheduleLoading } = useQuery({
     queryKey: ['today-schedule', user?.id],
@@ -106,30 +133,68 @@ const Dashboard = () => {
 
   const visibleStats = statsCards.filter((card) => card.show.includes(user?.role || ''));
 
-  // Mock data for charts - you can replace with real API data
-  const absenceTrendData = [
-    { day: 'Mon', excused: 12, unexcused: 5 },
-    { day: 'Tue', excused: 15, unexcused: 3 },
-    { day: 'Wed', excused: 10, unexcused: 7 },
-    { day: 'Thu', excused: 18, unexcused: 4 },
-    { day: 'Fri', excused: 14, unexcused: 6 },
-  ];
+  // Build absence trend data from analytics (last 7 days) or fallback empty
+  const absenceTrendData = (() => {
+    if (!absenceAnalytics || !Array.isArray(absenceAnalytics.absencesTrend)) return [];
 
-  const userDistributionData = [
-    { name: 'Students', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.7) : 70, color: '#3B82F6' },
-    { name: 'Teachers', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.2) : 20, color: '#10B981' },
-    { name: 'Admin', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.1) : 10, color: '#8B5CF6' },
-  ];
+    // Create map date -> count for quick lookup
+    const map = new Map<string, number>();
+    absenceAnalytics.absencesTrend.forEach((item: any) => {
+      map.set(item.date, item.count);
+    });
 
-  const weeklyActivityData = [
-    { day: 'Mon', messages: 45, events: 3 },
-    { day: 'Tue', messages: 52, events: 5 },
-    { day: 'Wed', messages: 48, events: 2 },
-    { day: 'Thu', messages: 61, events: 4 },
-    { day: 'Fri', messages: 55, events: 6 },
-    { day: 'Sat', messages: 20, events: 1 },
-    { day: 'Sun', messages: 15, events: 0 },
-  ];
+    const end = new Date();
+    const days: { day: string; excused?: number; unexcused?: number; count: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDays(end, -i);
+      const iso = d.toISOString().split('T')[0];
+      const count = map.get(iso) || 0;
+      days.push({ day: format(d, 'EEE'), count });
+    }
+
+    // Use 'count' as total absences; split into excused/unexcused if available per-date breakdown exists
+    return days.map((d) => ({ day: d.day, excused: 0, unexcused: d.count }));
+  })();
+
+  // Build user distribution from userStats.byRole if available
+  const userDistributionData = (() => {
+    if (!userStats) {
+      return [
+        { name: 'Students', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.7) : 70, color: '#3B82F6' },
+        { name: 'Teachers', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.2) : 20, color: '#10B981' },
+        { name: 'Admin', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.1) : 10, color: '#8B5CF6' },
+      ];
+    }
+
+    const byRole = Array.isArray(userStats.byRole) ? userStats.byRole : [];
+    const rows: { name: string; value: number; color: string }[] = [];
+    const roleColorMap: Record<string, string> = {
+      student: '#3B82F6',
+      teacher: '#10B981',
+      admin: '#8B5CF6',
+      department_head: '#F59E0B',
+    };
+
+    byRole.forEach((r: any) => {
+      const role = (r.role || r.user_role || r.role).toString();
+      const count = parseInt(r.count, 10) || 0;
+      rows.push({ name: role[0].toUpperCase() + role.slice(1), value: count, color: roleColorMap[role] || COLORS[rows.length % COLORS.length] });
+    });
+
+    // Fallback to totals if nothing
+    if (rows.length === 0) {
+      return [
+        { name: 'Students', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.7) : 70, color: '#3B82F6' },
+        { name: 'Teachers', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.2) : 20, color: '#10B981' },
+        { name: 'Admin', value: stats?.totalUsers ? Math.floor(stats.totalUsers * 0.1) : 10, color: '#8B5CF6' },
+      ];
+    }
+
+    return rows;
+  })();
+
+  // Weekly activity: reuse absence trend for a simple activity view until a dedicated endpoint exists
+  const weeklyActivityData = absenceTrendData.map((d) => ({ day: d.day, messages: d.unexcused || 0, events: 0 }));
 
   const COLORS = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444'];
 

@@ -3,12 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { subjectService, specialtyService, levelService } from '../../services/academicService';
 import { BookOpen, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function SubjectsManagement() {
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const queryClient = useQueryClient();
+  
+  const isAdmin = user?.role === 'admin';
+  const isDeptHead = user?.role === 'department_head';
 
   const { data: subjects = [], isLoading } = useQuery({ queryKey: ['subjects'], queryFn: subjectService.getAll });
   const { data: specialties = [] } = useQuery({ queryKey: ['specialties'], queryFn: specialtyService.getAll });
@@ -17,19 +22,44 @@ export default function SubjectsManagement() {
   const createMutation = useMutation({
     mutationFn: subjectService.create,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['subjects'] }); toast.success('Subject created'); setShowModal(false); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create subject');
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => subjectService.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['subjects'] }); toast.success('Subject updated'); setShowModal(false); setEditing(null); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update subject');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: subjectService.delete,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['subjects'] }); toast.success('Subject deleted'); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete subject');
+    },
   });
 
-  const filtered = subjects.filter((s: any) => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Filter subjects by department for department heads
+  const filtered = subjects.filter((subject: any) => {
+    // Department heads only see their own department's subjects
+    if (isDeptHead && user?.department?.id && subject.specialty?.department?.id !== user?.department?.id) {
+      return false;
+    }
+    return subject.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+  
+  // Filter specialties for dropdown - dept heads only see their department
+  const availableSpecialties = isDeptHead && user?.department?.id
+    ? specialties.filter((sp: any) => sp.department?.id === user?.department?.id)
+    : specialties;
+    
+  const availableLevels = isDeptHead && user?.department?.id
+    ? levels.filter((lv: any) => lv.specialty?.department?.id === user?.department?.id)
+    : levels;
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -127,13 +157,13 @@ export default function SubjectsManagement() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Specialty *</label>
                     <select name="specialtyId" defaultValue={editing?.specialty?.id} required className="input">
                       <option value="">Select Specialty</option>
-                      {specialties.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {availableSpecialties.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Level *</label>
                     <select name="levelId" defaultValue={editing?.level?.id} required className="input">
                       <option value="">Select Level</option>
-                      {levels.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      {availableLevels.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
                   </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester *</label>

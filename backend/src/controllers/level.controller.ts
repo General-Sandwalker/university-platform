@@ -7,7 +7,7 @@ const levelService = new LevelService();
 
 export const createLevel = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const level = await levelService.create(req.body);
+    const level = await levelService.create(req.body, req.user?.userId, req.user?.role);
     res.status(201).json({
       success: true,
       data: level,
@@ -42,7 +42,7 @@ export const getLevelById = asyncHandler(
 
 export const updateLevel = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const level = await levelService.update(req.params.id, req.body);
+    const level = await levelService.update(req.params.id, req.body, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       data: level,
@@ -52,7 +52,7 @@ export const updateLevel = asyncHandler(
 
 export const deleteLevel = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    await levelService.delete(req.params.id);
+    await levelService.delete(req.params.id, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       message: 'Level deleted successfully',

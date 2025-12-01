@@ -21,14 +21,28 @@ export class GroupService {
     code: string;
     levelId: string;
     capacity: number;
-  }): Promise<Group> {
+  }, userId?: string, userRole?: string): Promise<Group> {
     // Check if level exists
     const level = await this.levelRepository.findOne({
       where: { id: data.levelId },
+      relations: ['specialty', 'specialty.department'],
     });
 
     if (!level) {
       throw new AppError('Level not found', 404);
+    }
+
+    // Department head authorization: can only create groups for levels in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !level.specialty?.department || 
+          user.department.id !== level.specialty.department.id) {
+        throw new AppError('You can only create groups for levels in your department', 403);
+      }
     }
 
     // Check if group code already exists for this level
@@ -113,9 +127,42 @@ export class GroupService {
       code?: string;
       levelId?: string;
       capacity?: number;
-    }
+    },
+    userId?: string,
+    userRole?: string
   ): Promise<Group> {
     const group = await this.getById(id);
+
+    // Department head authorization: can only update groups in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      // Need to load level with specialty and department
+      const currentLevel = await this.levelRepository.findOne({
+        where: { id: group.level.id },
+        relations: ['specialty', 'specialty.department'],
+      });
+      
+      if (!user?.department || !currentLevel?.specialty?.department || 
+          user.department.id !== currentLevel.specialty.department.id) {
+        throw new AppError('You can only update groups in your department', 403);
+      }
+      
+      // If changing level, verify new level is also in their department
+      if (data.levelId && data.levelId !== group.level.id) {
+        const newLevel = await this.levelRepository.findOne({
+          where: { id: data.levelId },
+          relations: ['specialty', 'specialty.department'],
+        });
+        
+        if (!newLevel?.specialty?.department || newLevel.specialty.department.id !== user.department.id) {
+          throw new AppError('You can only assign groups to levels in your department', 403);
+        }
+      }
+    }
 
     // Check if new code conflicts with existing group in the same level
     if (data.code && data.code !== group.code) {
@@ -160,14 +207,27 @@ export class GroupService {
     return await this.groupRepository.save(group);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, userId?: string, userRole?: string): Promise<void> {
     const group = await this.groupRepository.findOne({
       where: { id },
-      relations: ['students', 'timetables'],
+      relations: ['students', 'timetables', 'level', 'level.specialty', 'level.specialty.department'],
     });
 
     if (!group) {
       throw new AppError('Group not found', 404);
+    }
+
+    // Department head authorization: can only delete groups in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !group.level?.specialty?.department || 
+          user.department.id !== group.level.specialty.department.id) {
+        throw new AppError('You can only delete groups in your department', 403);
+      }
     }
 
     // Check if group has students

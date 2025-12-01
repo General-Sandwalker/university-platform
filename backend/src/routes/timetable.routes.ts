@@ -12,6 +12,7 @@ import {
   updateTimetable,
   deleteTimetable,
   getAccessibleGroups,
+  getMyTeachingSchedule,
 } from '../controllers/timetable.controller';
 
 const router = Router();
@@ -21,6 +22,9 @@ router.use(authenticate);
 
 // Get groups accessible to the current user
 router.get('/accessible-groups', getAccessibleGroups);
+
+// Get teacher's teaching schedule
+router.get('/my-schedule', getMyTeachingSchedule);
 
 // Get timetable for a specific group
 router.get('/group/:groupId', getTimetableByGroup);

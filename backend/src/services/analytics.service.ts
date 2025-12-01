@@ -74,7 +74,7 @@ export class AnalyticsService {
 
     const absences = await this.absenceRepository.find({
       where: { student: { id: studentId } },
-      relations: ['subject'],
+      relations: ['timetableEntry', 'timetableEntry.subject'],
     });
 
     const totalAbsences = absences.length;
@@ -85,10 +85,6 @@ export class AnalyticsService {
     const totalSessions = await this.timetableRepository.count({
       where: {
         group: { id: student.group?.id },
-        date: Between(
-          new Date(new Date().getFullYear(), 8, 1), // September 1st
-          new Date()
-        ),
       },
     });
 
@@ -102,7 +98,7 @@ export class AnalyticsService {
     >();
 
     absences.forEach((absence) => {
-      const subjectName = absence.subject.name;
+      const subjectName = absence.timetableEntry?.subject?.name || 'Unknown';
       if (!absencesBySubjectMap.has(subjectName)) {
         absencesBySubjectMap.set(subjectName, {
           total: 0,
@@ -152,20 +148,24 @@ export class AnalyticsService {
       utilizationRate: number;
     }[];
   }> {
-    const whereConditions: any = {};
+    const queryBuilder = this.timetableRepository
+      .createQueryBuilder('timetable')
+      .leftJoinAndSelect('timetable.room', 'room')
+      .leftJoinAndSelect('timetable.semester', 'semester');
 
-    if (filters?.startDate && filters?.endDate) {
-      whereConditions.date = Between(filters.startDate, filters.endDate);
-    }
-
+    // Apply filters
     if (filters?.roomId) {
-      whereConditions.room = { id: filters.roomId };
+      queryBuilder.andWhere('timetable.roomId = :roomId', { roomId: filters.roomId });
     }
 
-    const sessions = await this.timetableRepository.find({
-      where: whereConditions,
-      relations: ['room'],
-    });
+    // Filter by semester dates if provided
+    if (filters?.startDate && filters?.endDate) {
+      queryBuilder
+        .andWhere('semester.startDate <= :endDate', { endDate: filters.endDate })
+        .andWhere('semester.endDate >= :startDate', { startDate: filters.startDate });
+    }
+
+    const sessions = await queryBuilder.getMany();
 
     const roomStats = new Map<
       string,
@@ -178,11 +178,11 @@ export class AnalyticsService {
     >();
 
     sessions.forEach((session) => {
-      const roomName = session.room.name;
+      const roomName = session.room?.name || 'Unknown';
       if (!roomStats.has(roomName)) {
         roomStats.set(roomName, {
           room: roomName,
-          capacity: session.room.capacity,
+          capacity: session.room?.capacity || 0,
           totalSessions: 0,
           totalHours: 0,
         });
@@ -233,40 +233,46 @@ export class AnalyticsService {
     absencesBySubject: { subject: string; count: number }[];
     absencesTrend: { date: string; count: number }[];
   }> {
-    const whereConditions: any = {};
+    const queryBuilder = this.absenceRepository
+      .createQueryBuilder('absence')
+      .leftJoinAndSelect('absence.student', 'student')
+      .leftJoinAndSelect('student.group', 'group')
+      .leftJoinAndSelect('absence.timetableEntry', 'timetableEntry')
+      .leftJoinAndSelect('timetableEntry.subject', 'subject');
 
+    // Apply filters
     if (filters?.startDate && filters?.endDate) {
-      whereConditions.date = Between(filters.startDate, filters.endDate);
+      queryBuilder.andWhere('absence.createdAt BETWEEN :startDate AND :endDate', {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
     }
 
     if (filters?.groupId) {
-      whereConditions.student = { group: { id: filters.groupId } };
+      queryBuilder.andWhere('student.groupId = :groupId', { groupId: filters.groupId });
     }
 
     if (filters?.subjectId) {
-      whereConditions.subject = { id: filters.subjectId };
+      queryBuilder.andWhere('timetableEntry.subjectId = :subjectId', { subjectId: filters.subjectId });
     }
 
-    const absences = await this.absenceRepository.find({
-      where: whereConditions,
-      relations: ['student', 'student.group', 'subject'],
-    });
+    const absences = await queryBuilder.getMany();
 
     const totalAbsences = absences.length;
     const excusedAbsences = absences.filter((a) => a.status === 'excused').length;
     const unexcusedAbsences = absences.filter((a) => a.status === 'unexcused').length;
     const pendingExcuses = absences.filter((a) => a.status === 'pending').length;
 
-    // Students at risk (status: at_risk or eliminated)
+    // Students at risk (status: suspended or eliminated)
     const studentsAtRisk = await this.userRepository.find({
-      where: [{ status: 'at_risk' }, { status: 'eliminated' }],
+      where: [{ status: 'suspended' }, { status: 'eliminated' }],
       relations: ['group'],
     });
 
     // Group absences by group
     const absencesByGroupMap = new Map<string, number>();
     absences.forEach((absence) => {
-      const groupName = absence.student.group?.name || 'No Group';
+      const groupName = absence.student?.group?.name || 'No Group';
       absencesByGroupMap.set(groupName, (absencesByGroupMap.get(groupName) || 0) + 1);
     });
 
@@ -280,7 +286,7 @@ export class AnalyticsService {
     // Group absences by subject
     const absencesBySubjectMap = new Map<string, number>();
     absences.forEach((absence) => {
-      const subjectName = absence.subject.name;
+      const subjectName = absence.timetableEntry?.subject?.name || 'No Subject';
       absencesBySubjectMap.set(
         subjectName,
         (absencesBySubjectMap.get(subjectName) || 0) + 1
@@ -297,7 +303,7 @@ export class AnalyticsService {
     // Absences trend (by day)
     const absencesByDateMap = new Map<string, number>();
     absences.forEach((absence) => {
-      const date = absence.date.toISOString().split('T')[0];
+      const date = absence.createdAt.toISOString().split('T')[0];
       absencesByDateMap.set(date, (absencesByDateMap.get(date) || 0) + 1);
     });
 
@@ -329,20 +335,26 @@ export class AnalyticsService {
     teacherWorkload: { teacher: string; sessions: number; hours: number }[];
     roomUsage: { room: string; sessions: number }[];
   }> {
-    const whereConditions: any = {};
+    const queryBuilder = this.timetableRepository
+      .createQueryBuilder('timetable')
+      .leftJoinAndSelect('timetable.teacher', 'teacher')
+      .leftJoinAndSelect('timetable.room', 'room')
+      .leftJoinAndSelect('timetable.semester', 'semester');
 
-    if (filters?.startDate && filters?.endDate) {
-      whereConditions.date = Between(filters.startDate, filters.endDate);
-    }
-
+    // Apply filters
     if (filters?.teacherId) {
-      whereConditions.teacher = { id: filters.teacherId };
+      queryBuilder.andWhere('timetable.teacherId = :teacherId', { teacherId: filters.teacherId });
     }
 
-    const sessions = await this.timetableRepository.find({
-      where: whereConditions,
-      relations: ['teacher', 'room'],
-    });
+    // Note: Timetable doesn't have date field - it's a recurring weekly schedule
+    // If date filtering is needed, join with semester and filter by semester dates
+    if (filters?.startDate && filters?.endDate) {
+      queryBuilder
+        .andWhere('semester.startDate <= :endDate', { endDate: filters.endDate })
+        .andWhere('semester.endDate >= :startDate', { startDate: filters.startDate });
+    }
+
+    const sessions = await queryBuilder.getMany();
 
     const totalSessions = sessions.length;
 
@@ -378,7 +390,9 @@ export class AnalyticsService {
     >();
 
     sessions.forEach((session) => {
-      const teacherName = `${session.teacher.firstName} ${session.teacher.lastName}`;
+      const teacherName = session.teacher 
+        ? `${session.teacher.firstName} ${session.teacher.lastName}` 
+        : 'Unknown';
       if (!teacherWorkloadMap.has(teacherName)) {
         teacherWorkloadMap.set(teacherName, {
           teacher: teacherName,
@@ -404,7 +418,7 @@ export class AnalyticsService {
     // Room usage
     const roomUsageMap = new Map<string, number>();
     sessions.forEach((session) => {
-      const roomName = session.room.name;
+      const roomName = session.room?.name || 'Unknown';
       roomUsageMap.set(roomName, (roomUsageMap.get(roomName) || 0) + 1);
     });
 

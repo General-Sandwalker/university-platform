@@ -3,12 +3,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { roomService } from '../../services/academicService';
 import { DoorOpen, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function RoomsManagement() {
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const queryClient = useQueryClient();
+  
+  const isAdmin = user?.role === 'admin';
 
   const { data: rooms = [], isLoading, error } = useQuery({ queryKey: ['rooms'], queryFn: roomService.getAll });
 
@@ -53,8 +57,17 @@ export default function RoomsManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-3xl font-bold text-gray-900">Rooms</h1><p className="mt-1 text-gray-600">Manage classrooms and facilities</p></div>
-        <button onClick={() => { setEditing(null); setShowModal(true); }} className="btn-primary flex items-center gap-2"><Plus className="w-5 h-5" />Add Room</button>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Rooms</h1>
+          <p className="mt-1 text-gray-600">
+            {isAdmin ? 'Manage classrooms and facilities' : 'View classrooms and facilities'}
+          </p>
+        </div>
+        {isAdmin && (
+          <button onClick={() => { setEditing(null); setShowModal(true); }} className="btn-primary flex items-center gap-2">
+            <Plus className="w-5 h-5" />Add Room
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -80,10 +93,12 @@ export default function RoomsManagement() {
                     <p className="text-xs text-gray-500">{item.code}</p>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => { setEditing(item); setShowModal(true); }} className="p-1 text-primary-600 hover:bg-primary-50 rounded"><Edit2 className="w-3 h-3" /></button>
-                  <button onClick={() => window.confirm('Delete?') && deleteMutation.mutate(item.id)} className="p-1 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3" /></button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-1">
+                    <button onClick={() => { setEditing(item); setShowModal(true); }} className="p-1 text-primary-600 hover:bg-primary-50 rounded"><Edit2 className="w-3 h-3" /></button>
+                    <button onClick={() => window.confirm('Delete?') && deleteMutation.mutate(item.id)} className="p-1 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1 text-xs text-gray-600">
                 <div>Building: {item.building}</div>

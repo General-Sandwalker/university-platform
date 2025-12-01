@@ -252,6 +252,36 @@ export class TimetableService {
     return await query.orderBy('timetable.dayOfWeek').addOrderBy('timetable.startTime').getMany();
   }
 
+  async getByTeacher(
+    teacherId: string,
+    semesterId?: string
+  ): Promise<Timetable[]> {
+    const query = this.timetableRepository
+      .createQueryBuilder('timetable')
+      .leftJoinAndSelect('timetable.subject', 'subject')
+      .leftJoinAndSelect('timetable.teacher', 'teacher')
+      .leftJoinAndSelect('timetable.room', 'room')
+      .leftJoinAndSelect('timetable.group', 'group')
+      .leftJoinAndSelect('timetable.semester', 'semester')
+      .where('timetable.teacherId = :teacherId', { teacherId });
+
+    if (semesterId) {
+      query.andWhere('timetable.semesterId = :semesterId', { semesterId });
+    } else {
+      // Get active semester if not specified
+      const activeSemester = await this.semesterRepository.findOne({
+        where: { isActive: true },
+      });
+      if (activeSemester) {
+        query.andWhere('timetable.semesterId = :semesterId', {
+          semesterId: activeSemester.id,
+        });
+      }
+    }
+
+    return await query.orderBy('timetable.dayOfWeek').addOrderBy('timetable.startTime').getMany();
+  }
+
   async getById(id: string, userId?: string, userRole?: string): Promise<Timetable> {
     const timetable = await this.timetableRepository.findOne({
       where: { id },

@@ -41,13 +41,16 @@ export const Schedule: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<TimetableEntry | null>(null);
   const [formData, setFormData] = useState<Partial<CreateTimetableData>>({});
 
-  const isReadOnly = user?.role === 'student' || user?.role === 'teacher';
+  const isTeacher = user?.role === 'teacher';
+  const isStudent = user?.role === 'student';
+  const isReadOnly = isStudent || isTeacher;
   const canEdit = user?.role === 'admin' || user?.role === 'department_head';
 
-  // Fetch accessible groups
+  // Fetch accessible groups (for non-teachers)
   const { data: groups = [], isLoading: groupsLoading } = useQuery({
     queryKey: ['accessible-groups'],
     queryFn: () => timetableService.getAccessibleGroups(),
+    enabled: !isTeacher,
   });
 
   // Fetch semesters
@@ -64,10 +67,10 @@ export const Schedule: React.FC = () => {
 
   // Set defaults when data loads
   useEffect(() => {
-    if (groups.length > 0 && !selectedGroupId) {
+    if (groups.length > 0 && !selectedGroupId && !isTeacher) {
       setSelectedGroupId(groups[0].id);
     }
-  }, [groups, selectedGroupId]);
+  }, [groups, selectedGroupId, isTeacher]);
 
   useEffect(() => {
     if (activeSemester && !selectedSemesterId) {
@@ -75,12 +78,23 @@ export const Schedule: React.FC = () => {
     }
   }, [activeSemester, selectedSemesterId]);
 
-  // Fetch timetable entries
-  const { data: entries = [], isLoading: entriesLoading } = useQuery({
+  // Fetch teacher's schedule
+  const { data: teacherSchedule = [], isLoading: teacherScheduleLoading } = useQuery({
+    queryKey: ['my-teaching-schedule', selectedSemesterId],
+    queryFn: () => timetableService.getMyTeachingSchedule(selectedSemesterId),
+    enabled: isTeacher && !!selectedSemesterId,
+  });
+
+  // Fetch timetable entries for group (students, dept heads, admin)
+  const { data: groupEntries = [], isLoading: entriesLoading } = useQuery({
     queryKey: ['timetable', selectedGroupId, selectedSemesterId],
     queryFn: () => timetableService.getByGroup(selectedGroupId, selectedSemesterId),
-    enabled: !!selectedGroupId && !!selectedSemesterId,
+    enabled: !isTeacher && !!selectedGroupId && !!selectedSemesterId,
   });
+
+  // Use teacher schedule for teachers, group entries for others
+  const entries = isTeacher ? teacherSchedule : groupEntries;
+  const isLoading = isTeacher ? teacherScheduleLoading : entriesLoading;
 
   // Fetch subjects for the form
   const { data: subjects = [] } = useQuery({
@@ -204,7 +218,7 @@ export const Schedule: React.FC = () => {
   const selectedGroup = groups.find((g) => g.id === selectedGroupId);
   const selectedSemester = semesters.find((s) => s.id === selectedSemesterId);
 
-  if (groupsLoading) {
+  if (groupsLoading && !isTeacher) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-500">Loading...</div>
@@ -212,15 +226,14 @@ export const Schedule: React.FC = () => {
     );
   }
 
-  if (groups.length === 0) {
+  if (!isTeacher && groups.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-gray-700 mb-2">No Accessible Groups</h2>
           <p className="text-gray-500">
-            {user?.role === 'student' && 'You are not assigned to any group.'}
-            {user?.role === 'teacher' && 'You do not have any classes assigned yet.'}
+            {isStudent && 'You are not assigned to any group.'}
             {user?.role === 'department_head' && 'No groups found in your department.'}
           </p>
         </div>
@@ -233,9 +246,13 @@ export const Schedule: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Class Schedule</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isTeacher ? 'My Teaching Schedule' : 'Class Schedule'}
+          </h1>
           <p className="text-gray-500 mt-1">
-            {isReadOnly ? 'View your class schedule' : 'Manage class schedules for groups'}
+            {isTeacher && 'View your teaching sessions and assigned classes'}
+            {isStudent && 'View your class schedule'}
+            {!isTeacher && !isStudent && 'Manage class schedules for groups'}
           </p>
         </div>
         {canEdit && (
@@ -259,26 +276,28 @@ export const Schedule: React.FC = () => {
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Group selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Group
-            </label>
-            <select
-              value={selectedGroupId}
-              onChange={(e) => setSelectedGroupId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.code} - {group.name} ({group.level?.specialty?.name})
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Group selector - only show for non-teachers */}
+          {!isTeacher && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Group
+              </label>
+              <select
+                value={selectedGroupId}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.code} - {group.name} ({group.level?.specialty?.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Semester selector */}
-          <div>
+          <div className={isTeacher ? 'md:col-span-2' : ''}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Semester
             </label>
@@ -296,7 +315,8 @@ export const Schedule: React.FC = () => {
           </div>
         </div>
 
-        {selectedGroup && selectedSemester && (
+        {/* Schedule info - show for non-teachers */}
+        {!isTeacher && selectedGroup && selectedSemester && (
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Calendar className="w-4 h-4" />
             <span>
@@ -307,10 +327,23 @@ export const Schedule: React.FC = () => {
             </span>
           </div>
         )}
+
+        {/* Schedule info - show for teachers */}
+        {isTeacher && selectedSemester && (
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Calendar className="w-4 h-4" />
+            <span>
+              Showing your teaching schedule for{' '}
+              <strong>{selectedSemester.name}</strong> (
+              {new Date(selectedSemester.startDate).toLocaleDateString()} -{' '}
+              {new Date(selectedSemester.endDate).toLocaleDateString()})
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Schedule Grid */}
-      {entriesLoading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center h-64 bg-white rounded-lg shadow">
           <div className="text-gray-500">Loading schedule...</div>
         </div>

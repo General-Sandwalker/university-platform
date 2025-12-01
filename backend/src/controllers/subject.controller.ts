@@ -7,7 +7,7 @@ const subjectService = new SubjectService();
 
 export const createSubject = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const subject = await subjectService.create(req.body);
+    const subject = await subjectService.create(req.body, req.user?.userId, req.user?.role);
     res.status(201).json({
       success: true,
       data: subject,
@@ -46,7 +46,7 @@ export const getSubjectById = asyncHandler(
 
 export const updateSubject = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const subject = await subjectService.update(req.params.id, req.body);
+    const subject = await subjectService.update(req.params.id, req.body, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       data: subject,
@@ -56,7 +56,7 @@ export const updateSubject = asyncHandler(
 
 export const deleteSubject = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    await subjectService.delete(req.params.id);
+    await subjectService.delete(req.params.id, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       message: 'Subject deleted successfully',

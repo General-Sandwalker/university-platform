@@ -12,6 +12,8 @@ import {
   markAllAsRead,
   deleteMessage,
   getUnreadCount,
+  toggleStar,
+  markConversationAsRead,
 } from '../controllers/message.controller';
 import { z } from 'zod';
 
@@ -193,6 +195,27 @@ router.put('/mark-all-read', authenticate, markAllAsRead);
 
 /**
  * @swagger
+ * /api/messages/conversation/{otherUserId}/read:
+ *   put:
+ *     summary: Mark all messages in a conversation as read
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: otherUserId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Conversation marked as read
+ */
+router.put('/conversation/:otherUserId/read', authenticate, markConversationAsRead);
+
+/**
+ * @swagger
  * /api/messages/conversation/{otherUserId}:
  *   get:
  *     summary: Get conversation with a specific user
@@ -267,6 +290,31 @@ router.get('/:id', authenticate, getMessageById);
  *               $ref: '#/components/schemas/Message'
  */
 router.put('/:id/read', authenticate, markAsRead);
+
+/**
+ * @swagger
+ * /api/messages/{id}/star:
+ *   put:
+ *     summary: Toggle star/favorite status on a message
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Message star status toggled
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Message'
+ */
+router.put('/:id/star', authenticate, toggleStar);
 
 /**
  * @swagger

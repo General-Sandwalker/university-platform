@@ -147,7 +147,9 @@ export default function Absences() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div><h1 className="text-3xl font-bold text-gray-900">Absences</h1><p className="mt-1 text-gray-600">Track student absences</p></div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2"><Plus className="w-5 h-5" />Record Absence</button>
+        {(user?.role === 'teacher' || user?.role === 'department_head' || user?.role === 'admin') && (
+          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2"><Plus className="w-5 h-5" />Record Absence</button>
+        )}
       </div>
 
       <div className="card">
@@ -241,7 +243,7 @@ export default function Absences() {
         </div>
       </div>
 
-      {showModal && (
+      {showModal && (user?.role === 'teacher' || user?.role === 'department_head' || user?.role === 'admin') && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-lg w-full">
             <div className="p-6">

@@ -7,7 +7,7 @@ const specialtyService = new SpecialtyService();
 
 export const createSpecialty = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const specialty = await specialtyService.create(req.body);
+    const specialty = await specialtyService.create(req.body, req.user?.userId, req.user?.role);
     res.status(201).json({
       success: true,
       data: specialty,
@@ -42,7 +42,7 @@ export const getSpecialtyById = asyncHandler(
 
 export const updateSpecialty = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    const specialty = await specialtyService.update(req.params.id, req.body);
+    const specialty = await specialtyService.update(req.params.id, req.body, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       data: specialty,
@@ -52,7 +52,7 @@ export const updateSpecialty = asyncHandler(
 
 export const deleteSpecialty = asyncHandler(
   async (req: AuthRequest, res: Response) => {
-    await specialtyService.delete(req.params.id);
+    await specialtyService.delete(req.params.id, req.user?.userId, req.user?.role);
     res.json({
       success: true,
       message: 'Specialty deleted successfully',

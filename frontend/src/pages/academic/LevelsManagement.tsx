@@ -3,12 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { levelService, specialtyService } from '../../services/academicService';
 import { Layers, Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function LevelsManagement() {
+  const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const queryClient = useQueryClient();
+  
+  const isAdmin = user?.role === 'admin';
+  const isDeptHead = user?.role === 'department_head';
 
   const { data: levels = [], isLoading } = useQuery({ queryKey: ['levels'], queryFn: levelService.getAll });
   const { data: specialties = [] } = useQuery({ queryKey: ['specialties'], queryFn: specialtyService.getAll });
@@ -16,19 +21,40 @@ export default function LevelsManagement() {
   const createMutation = useMutation({
     mutationFn: levelService.create,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['levels'] }); toast.success('Level created'); setShowModal(false); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create level');
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => levelService.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['levels'] }); toast.success('Level updated'); setShowModal(false); setEditing(null); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update level');
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: levelService.delete,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['levels'] }); toast.success('Level deleted'); },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to delete level');
+    },
   });
 
-  const filtered = levels.filter((l: any) => l.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Filter levels by department for department heads
+  const filtered = levels.filter((level: any) => {
+    // Department heads only see their own department's levels
+    if (isDeptHead && user?.department?.id && level.specialty?.department?.id !== user?.department?.id) {
+      return false;
+    }
+    return level.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+  
+  // Filter specialties for dropdown - dept heads only see their department
+  const availableSpecialties = isDeptHead && user?.department?.id
+    ? specialties.filter((sp: any) => sp.department?.id === user?.department?.id)
+    : specialties;
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -105,7 +131,7 @@ export default function LevelsManagement() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Specialty *</label>
                     <select name="specialtyId" defaultValue={editing?.specialty?.id} required className="input">
                       <option value="">Select Specialty</option>
-                      {specialties.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {availableSpecialties.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Year *</label><input type="number" name="year" defaultValue={editing?.year || 1} min="1" max="5" required className="input" placeholder="1-5" /></div>

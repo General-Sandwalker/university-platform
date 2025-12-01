@@ -29,7 +29,14 @@ export const getAllAbsences = asyncHandler(
       status: req.query.status as 'unexcused' | 'pending' | 'excused' | 'rejected',
       startDate: req.query.startDate as string,
       endDate: req.query.endDate as string,
+      currentUserId: req.user?.userId,
+      currentUserRole: req.user?.role,
     };
+
+    // If user is a student, they can only see their own absences
+    if (req.user?.role === 'student') {
+      filters.studentId = req.user.userId;
+    }
 
     const absences = await absenceService.getAll(filters);
 
@@ -44,6 +51,34 @@ export const getAbsenceById = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const absence = await absenceService.getById(req.params.id);
 
+    // Check authorization based on role
+    if (req.user?.role === 'student') {
+      // Students can only view their own absences
+      if (absence.student.id !== req.user.userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only view your own absences',
+        });
+      }
+    } else if (req.user?.role === 'department_head') {
+      // Department heads can only view absences from their department
+      const user = await absenceService.getUserWithDepartment(req.user.userId);
+      if (!user?.department || absence.student.department?.id !== user.department.id) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only view absences from your department',
+        });
+      }
+    } else if (req.user?.role === 'teacher') {
+      // Teachers can only view absences from their classes
+      if (absence.timetableEntry.teacher.id !== req.user.userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only view absences from your classes',
+        });
+      }
+    }
+
     res.json({
       success: true,
       data: absence,
@@ -55,6 +90,14 @@ export const getStudentAbsences = asyncHandler(
   async (req: AuthRequest, res: Response) => {
     const studentId = req.params.studentId;
     const subjectId = req.query.subjectId as string;
+
+    // If user is a student, they can only view their own absences
+    if (req.user?.role === 'student' && studentId !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only view your own absences',
+      });
+    }
 
     const result = await absenceService.getStudentAbsences(studentId, subjectId);
 

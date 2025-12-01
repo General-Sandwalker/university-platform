@@ -29,14 +29,27 @@ export class SubjectService {
     semester: number;
     type: 'lecture' | 'td' | 'tp';
     teacherId?: string;
-  }): Promise<Subject> {
+  }, userId?: string, userRole?: string): Promise<Subject> {
     // Check if specialty exists
     const specialty = await this.specialtyRepository.findOne({
       where: { id: data.specialtyId },
+      relations: ['department'],
     });
 
     if (!specialty) {
       throw new AppError('Specialty not found', 404);
+    }
+
+    // Department head authorization: can only create subjects for their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || user.department.id !== specialty.department.id) {
+        throw new AppError('You can only create subjects for your department', 403);
+      }
     }
 
     // Check if level exists and belongs to the specialty
@@ -107,6 +120,7 @@ export class SubjectService {
     const query = this.subjectRepository
       .createQueryBuilder('subject')
       .leftJoinAndSelect('subject.specialty', 'specialty')
+      .leftJoinAndSelect('specialty.department', 'department')
       .leftJoinAndSelect('subject.level', 'level')
       .leftJoinAndSelect('subject.teacher', 'teacher')
       .orderBy('subject.name', 'ASC');
@@ -182,9 +196,42 @@ export class SubjectService {
       semester?: number;
       type?: 'lecture' | 'td' | 'tp';
       teacherId?: string;
-    }
+    },
+    userId?: string,
+    userRole?: string
   ): Promise<Subject> {
     const subject = await this.getById(id);
+
+    // Department head authorization: can only update subjects in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      // Fetch specialty with department to check authorization
+      const currentSpecialty = await this.specialtyRepository.findOne({
+        where: { id: subject.specialty.id },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !currentSpecialty?.department || 
+          user.department.id !== currentSpecialty.department.id) {
+        throw new AppError('You can only update subjects in your department', 403);
+      }
+      
+      // If changing specialty, verify new specialty is also in their department
+      if (data.specialtyId && data.specialtyId !== subject.specialty.id) {
+        const newSpecialty = await this.specialtyRepository.findOne({
+          where: { id: data.specialtyId },
+          relations: ['department'],
+        });
+        
+        if (!newSpecialty?.department || newSpecialty.department.id !== user.department.id) {
+          throw new AppError('You can only assign subjects to specialties in your department', 403);
+        }
+      }
+    }
 
     // Check if new code conflicts with existing subject in the same specialty
     if (data.code && data.code !== subject.code) {
@@ -262,14 +309,27 @@ export class SubjectService {
     return await this.subjectRepository.save(subject);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, userId?: string, userRole?: string): Promise<void> {
     const subject = await this.subjectRepository.findOne({
       where: { id },
-      relations: ['timetables'],
+      relations: ['timetables', 'specialty', 'specialty.department'],
     });
 
     if (!subject) {
       throw new AppError('Subject not found', 404);
+    }
+
+    // Department head authorization: can only delete subjects in their department
+    if (userRole === 'department_head' && userId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['department'],
+      });
+      
+      if (!user?.department || !subject.specialty?.department || 
+          user.department.id !== subject.specialty.department.id) {
+        throw new AppError('You can only delete subjects in your department', 403);
+      }
     }
 
     // Check if subject has timetable entries

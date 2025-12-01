@@ -39,6 +39,15 @@ export const messageService = {
     return response.data;
   },
 
+  markConversationAsRead: async (otherUserId: string): Promise<void> => {
+    await apiClient.put(`/messages/conversation/${otherUserId}/read`);
+  },
+
+  toggleStar: async (messageId: string): Promise<Message> => {
+    const response = await apiClient.put<Message>(`/messages/${messageId}/star`);
+    return response.data;
+  },
+
   markAllAsRead: async (): Promise<void> => {
     await apiClient.put('/messages/mark-all-read');
   },

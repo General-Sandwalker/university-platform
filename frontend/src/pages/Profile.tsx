@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
-import { User, Mail, Phone, MapPin, Calendar, Shield } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Calendar, Shield, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const Profile = () => {
@@ -116,6 +116,23 @@ const Profile = () => {
           </div>
         </div>
       </div>
+
+      {/* Department Information - Only for Department Heads */}
+      {user?.role === 'department_head' && user?.department && (
+        <div className="card">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Department Information</h2>
+          <div className="flex items-start space-x-3">
+            <Building2 className="w-5 h-5 text-primary-600 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-gray-500">Department</p>
+              <p className="text-gray-900 font-semibold">{user.department.name}</p>
+              {user.department.code && (
+                <p className="text-sm text-gray-600 mt-1">Code: {user.department.code}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

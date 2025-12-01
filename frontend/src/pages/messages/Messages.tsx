@@ -244,11 +244,9 @@ const ComposeModal = ({ onClose }: { onClose: () => void }) => {
 
   const sendMutation = useMutation({
     mutationFn: (data: { receiverId: string; content: string }) => {
-      console.log('mutationFn called with:', data);
       return messageService.sendMessage(data);
     },
     onSuccess: () => {
-      console.log('Message sent successfully');
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       toast.success('Message sent!');
       onClose();
@@ -261,26 +259,17 @@ const ComposeModal = ({ onClose }: { onClose: () => void }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('=== COMPOSE MESSAGE DEBUG ===');
-    console.log('receiverId:', receiverId);
-    console.log('content:', content);
-    console.log('content.trim():', content.trim());
-    console.log('selectedUser:', selectedUser);
-    console.log('sendMutation.isPending:', sendMutation.isPending);
     
     if (!receiverId) {
-      console.log('ERROR: No receiverId');
       toast.error('Please select a recipient');
       return;
     }
     
     if (!content.trim()) {
-      console.log('ERROR: No content');
       toast.error('Please enter a message');
       return;
     }
     
-    console.log('Calling sendMutation.mutate() with:', { receiverId, content });
     sendMutation.mutate({ receiverId, content });
   };
 
@@ -292,27 +281,6 @@ const ComposeModal = ({ onClose }: { onClose: () => void }) => {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
-        </div>
-
-        {/* Debug Info */}
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm space-y-1">
-          <strong className="text-lg">🔍 Debug Info:</strong>
-          <div className="font-mono">receiverId: <span className="font-bold text-blue-600">{receiverId || '❌ EMPTY'}</span></div>
-          <div className="font-mono">selectedUser: <span className="font-bold text-blue-600">{selectedUser ? `✅ ${selectedUser.firstName}` : '❌ NULL'}</span></div>
-          <div className="font-mono">content: <span className="font-bold text-green-600">{content || '❌ EMPTY'}</span></div>
-          <div className="font-mono">content.trim(): <span className="font-bold text-green-600">{content.trim() || '❌ EMPTY'}</span></div>
-          <div className="font-mono">isPending: <span className="font-bold">{String(sendMutation.isPending)}</span></div>
-          <div className="font-mono text-red-600 text-base">
-            <strong>Button disabled:</strong> {String(!receiverId || !content.trim() || sendMutation.isPending)}
-          </div>
-          <div className="font-mono text-red-600 text-base">
-            <strong>Reason:</strong> {
-              !receiverId ? '❌ No receiverId' : 
-              !content.trim() ? '❌ No content' : 
-              sendMutation.isPending ? '⏳ Sending...' : 
-              '✅ Should work!'
-            }
-          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -354,7 +322,6 @@ const ComposeModal = ({ onClose }: { onClose: () => void }) => {
                         key={user.id}
                         type="button"
                         onClick={() => {
-                          console.log('User selected:', user);
                           setReceiverId(user.id);
                           setSelectedUser(user);
                           setShowResults(false);
@@ -375,10 +342,7 @@ const ComposeModal = ({ onClose }: { onClose: () => void }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
             <textarea
               value={content}
-              onChange={(e) => {
-                console.log('Content changed:', e.target.value);
-                setContent(e.target.value);
-              }}
+              onChange={(e) => setContent(e.target.value)}
               rows={4}
               className="input"
               placeholder="Type your message..."
@@ -387,29 +351,11 @@ const ComposeModal = ({ onClose }: { onClose: () => void }) => {
           </div>
 
           <div className="flex justify-end space-x-3">
-            <button 
-              type="button" 
-              onClick={() => {
-                console.log('TEST BUTTON CLICKED - This proves clicks work!');
-                alert('Test button works! Check console.');
-              }}
-              className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
-            >
-              🧪 Test Click
-            </button>
             <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
             <button 
-              type="button"
-              onClick={(e) => {
-                console.log('=== BUTTON CLICKED ===');
-                console.log('Event:', e);
-                console.log('receiverId:', receiverId);
-                console.log('content:', content);
-                console.log('disabled:', !receiverId || !content.trim() || sendMutation.isPending);
-                handleSubmit(e as any);
-              }}
+              type="submit"
               disabled={!receiverId || !content.trim() || sendMutation.isPending} 
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
