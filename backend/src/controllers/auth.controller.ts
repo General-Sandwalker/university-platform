@@ -93,10 +93,13 @@ export class AuthController {
    * @access Private
    */
   getMe = asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.userId;
+    const user = await authService.getUserById(userId);
+
     res.status(200).json({
       status: 'success',
       data: {
-        user: req.user,
+        user,
       },
     });
   });

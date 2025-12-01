@@ -174,4 +174,30 @@ export class AuthService {
 
     logger.info(`Password changed for user: ${user.cin}`);
   }
+
+  async getUserById(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['department', 'group'],
+    });
+
+    if (!user) {
+      throw new AppError(404, 'User not found');
+    }
+
+    return {
+      id: user.id,
+      cin: user.cin,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      phone: user.phone,
+      address: user.address,
+      dateOfBirth: user.dateOfBirth,
+      department: user.department,
+      group: user.group,
+    };
+  }
 }
